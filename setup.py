@@ -8,7 +8,7 @@ with open('requirements.txt') as open_file:
     install_requires = open_file.read()
 
 setuptools.setup(
-    name="space-time",
+    name="spacetime",
     version="0.0.1",
     author="Geert-Jan Huizing",
     author_email="geert-jan.huizing@ens.fr",
