@@ -2,6 +2,7 @@ from spacetime import data
 from jax import random
 
 def test_euler_maruyama():
+    
     # Define the hyperparameters.
     key = random.PRNGKey(42)
     n, d = 25, 2
@@ -22,3 +23,8 @@ def test_euler_maruyama():
     # Iterate over the populations.
     for p in populations:
         pass
+
+def test_generate_data():
+
+    # Generate a toy dataset.
+    adata = data.generate_adata()
