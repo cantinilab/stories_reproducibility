@@ -20,7 +20,7 @@ def quadratic_potential(u: jnp.ndarray) -> callable:
 
 # Get the drift function for some potential.
 def get_drift(potential: callable):
-    return -vmap(grad(potential))
+    return vmap(grad(potential))
 
 
 # Generate a sequence of populations using the Euler-Maruyama method.
@@ -43,6 +43,6 @@ def euler_maruyama(
     for _ in range(n_steps):
 
         # Perform the Euler-Maruyama step.
-        u = u + drift(u) * dt + jnp.sqrt(dt) * sd * random.normal(key, u.shape)
+        u = u - drift(u) * dt + jnp.sqrt(dt) * sd * random.normal(key, u.shape)
 
         yield u  # Yield the new population.
