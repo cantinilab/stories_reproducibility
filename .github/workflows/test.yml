@@ -26,4 +26,4 @@ jobs:
         python -m pip install --upgrade pip
         pip install ".[test]"
     - name: Test with pytest
-      run: pytest -s my_package/tests
+      run: pytest -s space-time/tests
