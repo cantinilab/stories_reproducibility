@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "space-time"
+version = "0.1.0"
+description = ""
+authors = ["Geert-Jan Huizing <huizing@ens.fr>"]
+readme = "README.md"
+packages = [{include = "space_time"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
