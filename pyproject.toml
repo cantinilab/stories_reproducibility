@@ -2,12 +2,13 @@
 name = "space-time"
 version = "0.1.0"
 description = ""
-authors = ["Geert-Jan Huizing <huizing@ens.fr>"]
+authors = ["Geert-Jan Huizing <geert-jan.huizing@ens.fr>"]
 readme = "README.md"
 packages = [{include = "space_time"}]
 
 [tool.poetry.dependencies]
 python = "^3.8"
+ott-jax = "^0.4.0"
 
 
 [build-system]
