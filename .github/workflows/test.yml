@@ -27,4 +27,4 @@ jobs:
         pip install flake8 pytest coverage
         pip install .
     - name: Test with pytest
-      run: pytest -s spacetime/tests
+      run: pytest
