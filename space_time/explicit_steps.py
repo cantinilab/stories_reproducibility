@@ -60,7 +60,7 @@ def inverse_partial_Q(
     phi: Callable,
     fused: float,
 ) -> jnp.array:
-    """Given a function $\phi : \mathbb R^d \to \mathbb R$ and the potentila functions,
+    """Given a function $\phi : \mathbb R^d \to \mathbb R$ and the potential functions,
     return the velocity vector field v as a jnp.array of size (N, d).
 
     Args:
