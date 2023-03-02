@@ -22,7 +22,7 @@ def test_implicit_wass_gradient_flow():
         tau=0.1,
     )
 
-    assert len(predictions) == n_proximal_steps
+    assert len(predictions) == n_proximal_steps + 1
 
 
 def test_explicit_wass_gradient_flow():
@@ -39,7 +39,7 @@ def test_explicit_wass_gradient_flow():
         tau=1e-2,
     )
 
-    assert len(predictions) == n_proximal_steps
+    assert len(predictions) == n_proximal_steps + 1
 
 
 def test_implicit_gw_gradient_flow():
@@ -56,7 +56,7 @@ def test_implicit_gw_gradient_flow():
         tau=0.1,
     )
 
-    assert len(predictions) == n_proximal_steps
+    assert len(predictions) == n_proximal_steps + 1
 
 
 def test_explicit_gw_gradient_flow():
@@ -74,4 +74,4 @@ def test_explicit_gw_gradient_flow():
         fused=1.0,
     )
 
-    assert len(predictions) == n_proximal_steps
+    assert len(predictions) == n_proximal_steps + 1
