@@ -46,7 +46,8 @@ class SpaceTime:
         self,
         input_distributions: List[jnp.ndarray],  # (time, cells, dims)
         optimizer: GradientTransformation = optax.chain(optax.zero_nans(), optax.adam(1e-2)),
-        n_iter: int = 1_000,
+        n_iter: int = 100,
+        batch_iter: int = 100,
         batch_size: int = None,
         key: PRNGKey = PRNGKey(0),
     ):
@@ -155,17 +156,17 @@ class SpaceTime:
                 ))
 
                 # Pad the marginals with zeros.
-                padded_marginals.append(jnp.pad(
-                    jnp.ones(timepoint.shape[0])/timepoint.shape[0],
+                a = jnp.pad(
+                    jnp.ones(timepoint.shape[0]),
                     (0, batch_size - len(timepoint)),
                     mode="constant",
-                ))
-            else:
-                padded_distributions.append(timepoint[:batch_size])
-                padded_marginals.append(jnp.ones(batch_size)/batch_size)
+                    constant_values=1e-6,
+                )
 
-        print(padded_distributions)
-        print(padded_marginals)
+                padded_marginals.append(a/a.sum())
+            else:
+                padded_distributions.append(timepoint)
+                padded_marginals.append(jnp.ones(timepoint.shape[0])/timepoint.shape[0])
 
         # Initialize the parameters of the potential function.
         init_key, batch_key = jax.random.split(key)
@@ -174,34 +175,36 @@ class SpaceTime:
         # Initialize the optimizer.
         opt_state = optimizer.init(self.params)
 
-        # Sample a batch of cells from each timepoint.
-        # idx_list = []
-        # for timepoint in input_distributions:
-        #     timepoint_key, batch_key = jax.random.split(batch_key)
-        #     idx_timepoint = jax.random.choice(
-        #         timepoint_key,
-        #         len(timepoint),
-        #         shape=(batch_size,),
-        #         replace=False,
-        #     )
-        #     idx_list.append(idx_timepoint)
-        
-        # batch = jnp.stack([timepoint[idx] for timepoint, idx in zip(input_distributions, idx_list)])
-        # batch_marginals = jnp.stack([timepoint[idx]/timepoint[idx].sum() for timepoint, idx in zip(input_marginals, idx_list)])
-
         # Iterate through the training loop.
         pbar = tqdm(range(n_iter))
-        for _ in pbar:
+        for outer_it in pbar:
 
-            # Perform an optimization step.
-            self.params, opt_state, loss_value = step(
-                self.params,
-                opt_state=opt_state,
-                batch=jnp.stack(padded_distributions),
-                batch_marginals=jnp.stack(padded_marginals),
-            )
+            # Sample a batch of cells from each timepoint.
+            idx_list = []
+            for timepoint in padded_distributions:
+                timepoint_key, batch_key = jax.random.split(batch_key)
+                idx_timepoint = jax.random.choice(
+                    timepoint_key,
+                    len(timepoint),
+                    shape=(batch_size,),
+                    replace=False,
+                )
+                idx_list.append(idx_timepoint)
+        
+            batch = jnp.stack([timepoint[idx] for timepoint, idx in zip(padded_distributions, idx_list)])
+            batch_marginals = jnp.stack([timepoint[idx]/timepoint[idx].sum() for timepoint, idx in zip(padded_marginals, idx_list)])
 
-            pbar.set_postfix({"loss": loss_value})
+            for batch_it in range(batch_iter):
+
+                # Perform an optimization step.
+                self.params, opt_state, loss_value = step(
+                    self.params,
+                    opt_state=opt_state,
+                    batch=jnp.stack(batch),
+                    batch_marginals=jnp.stack(batch_marginals),
+                )
+
+                pbar.set_postfix({"loss": loss_value})
     
     def fit_adata(
         self,
