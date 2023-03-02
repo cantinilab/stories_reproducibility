@@ -1,4 +1,4 @@
-from typing import Callable, Iterable, Union
+from typing import Callable, Iterable, List, Union
 
 import anndata as ad
 import flax.linen as nn
@@ -44,10 +44,10 @@ class SpaceTime:
 
     def fit(
         self,
-        input_distributions: jnp.ndarray,  # (time, cells, dims)
-        input_marginals: jnp.ndarray = None,  # (time, cells, dims)
+        input_distributions: List[jnp.ndarray],  # (time, cells, dims)
         optimizer: GradientTransformation = optax.chain(optax.zero_nans(), optax.adam(1e-2)),
         n_iter: int = 1_000,
+        batch_size: int = None,
         key: PRNGKey = PRNGKey(0),
     ):
         """Fit the model to some input data.
@@ -137,16 +137,57 @@ class SpaceTime:
             # Return the updated parameters, optimizer state and loss.
             return params, opt_state, loss_value
 
+        # Define the batch_size.
+        if batch_size is None:
+            batch_size = min([len(batch) for batch in input_distributions])
+        
+        # Pad the input distributions with zeros if they are smaller than batch_size.
+        padded_distributions = []
+        padded_marginals = []
+        for timepoint in input_distributions:
+            if len(timepoint) < batch_size:
+
+                # Pad the timepoint with zeros.
+                padded_distributions.append(jnp.pad(
+                    timepoint,
+                    ((0, batch_size - len(timepoint)), (0, 0)),
+                    mode="mean",
+                ))
+
+                # Pad the marginals with zeros.
+                padded_marginals.append(jnp.pad(
+                    jnp.ones(timepoint.shape[0])/timepoint.shape[0],
+                    (0, batch_size - len(timepoint)),
+                    mode="constant",
+                ))
+            else:
+                padded_distributions.append(timepoint[:batch_size])
+                padded_marginals.append(jnp.ones(batch_size)/batch_size)
+
+        print(padded_distributions)
+        print(padded_marginals)
+
         # Initialize the parameters of the potential function.
-        self.params = self.potential.init(key, input_distributions[0])
+        init_key, batch_key = jax.random.split(key)
+        self.params = self.potential.init(init_key, padded_distributions[0])
 
         # Initialize the optimizer.
         opt_state = optimizer.init(self.params)
 
-        # If marginals are not defined, they are uniform.
-        if input_marginals is None:
-            input_marginals = jnp.ones_like(input_distributions[:,:,0])
-            input_marginals /= input_distributions.shape[1] 
+        # Sample a batch of cells from each timepoint.
+        # idx_list = []
+        # for timepoint in input_distributions:
+        #     timepoint_key, batch_key = jax.random.split(batch_key)
+        #     idx_timepoint = jax.random.choice(
+        #         timepoint_key,
+        #         len(timepoint),
+        #         shape=(batch_size,),
+        #         replace=False,
+        #     )
+        #     idx_list.append(idx_timepoint)
+        
+        # batch = jnp.stack([timepoint[idx] for timepoint, idx in zip(input_distributions, idx_list)])
+        # batch_marginals = jnp.stack([timepoint[idx]/timepoint[idx].sum() for timepoint, idx in zip(input_marginals, idx_list)])
 
         # Iterate through the training loop.
         pbar = tqdm(range(n_iter))
@@ -156,8 +197,8 @@ class SpaceTime:
             self.params, opt_state, loss_value = step(
                 self.params,
                 opt_state=opt_state,
-                batch=input_distributions,
-                batch_marginals=input_marginals,
+                batch=jnp.stack(padded_distributions),
+                batch_marginals=jnp.stack(padded_marginals),
             )
 
             pbar.set_postfix({"loss": loss_value})
@@ -175,34 +216,15 @@ class SpaceTime:
         assert adata.obs[time_obs].dtype == int, "Time observations must be integers."
         timepoints = np.sort(np.unique(adata.obs[time_obs]))
 
-        # Define the batch size as the largest number of cells in a timepoint.
-        batch_size = max([adata[adata.obs[time_obs] == t].n_obs for t in timepoints])
-
-        # Initialize the input distributions.
-        input_distributions = []
-        input_marginals = []
-
         # Iterate through the timepoints and add the data to the list.
+        input_distributions = []
         for t in timepoints:
-
-            # Get the data for the current timepoint.
             x = jnp.array(adata[adata.obs[time_obs] == t].obsm[obsm])
-
-            # Pad the data with zeros.
-            x_padded = jnp.pad(x, ((0, batch_size - x.shape[0]), (0, 0)), mode="linear_ramp")
-
-            # Define the marginal, uniform with padded zeros.
-            a = jnp.ones(x_padded.shape[0])/x_padded.shape[0]
-            a_padded = jnp.pad(a, (0, batch_size - a.shape[0]))
-
-            # Add the data to the list.
-            input_distributions.append(x_padded)
-            input_marginals.append(a_padded)
+            input_distributions.append(x)
 
         # Fit the model to the input distributions.
         self.fit(
-            input_distributions=jnp.stack(input_distributions),
-            input_marginals=jnp.stack(input_marginals),
+            input_distributions=input_distributions,
             **kwargs,
         )
 
