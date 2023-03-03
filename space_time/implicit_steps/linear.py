@@ -64,7 +64,9 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
             # Return the proximal cost
             return tau * jnp.sum(potential_fun(y)) + cost
 
-        gd = jaxopt.GradientDescent(fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff)
+        gd = jaxopt.GradientDescent(
+            fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff
+        )
         y, _ = gd.run(x, inner_x=x, inner_a=a)
         return y
 
@@ -87,7 +89,11 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
             jnp.array: The output distribution, size (N, d)
         """
 
-        solver = Sinkhorn(min_iterations=self.sinkhorn_iter, max_iterations=self.sinkhorn_iter, implicit_diff=None)
+        solver = Sinkhorn(
+            min_iterations=self.sinkhorn_iter,
+            max_iterations=self.sinkhorn_iter,
+            implicit_diff=None,
+        )
 
         def proximal_cost(y, inner_x, inner_potential_params, inner_a):
 
@@ -99,10 +105,12 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
             # Debias
             geom = PointCloud(y, y, epsilon=self.epsilon)
             out = solver(LinearProblem(geom, a=inner_a, b=inner_a))
-            cost -= 0.5*out.reg_ot_cost
+            cost -= 0.5 * out.reg_ot_cost
 
             # Return the proximal cost
-            return tau * jnp.sum(potential_network.apply(inner_potential_params, y)) + cost
+            return (
+                tau * jnp.sum(potential_network.apply(inner_potential_params, y)) + cost
+            )
 
         # # TODO: tolerance?
         gd = jaxopt.GradientDescent(

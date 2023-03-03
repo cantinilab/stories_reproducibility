@@ -10,7 +10,7 @@ from space_time import explicit_steps, implicit_steps, model, potentials
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="celegans")
-def main(config : DictConfig) -> None:
+def main(config: DictConfig) -> None:
 
     # Load the data.
     adata = ad.read_h5ad(config.dataset.path)
@@ -32,31 +32,31 @@ def main(config : DictConfig) -> None:
 
     # Define the model.
     my_model = model.SpaceTime(
-        potential = potential,
-        proximal_step = proximal_step,
-        tau = config.model.tau,
-        debias = config.model.debias,
-        epsilon = config.model.epsilon,
+        potential=potential,
+        proximal_step=proximal_step,
+        tau=config.model.tau,
+        debias=config.model.debias,
+        epsilon=config.model.epsilon,
     )
 
     # Fit the model.
     my_model.fit_adata(
-        adata = adata,
-        time_obs = config.dataset.time_obs,
-        obsm = config.dataset.obsm,
-        optimizer = optax.adam(config.optimizer.learning_rate),
-        n_iter = config.optimizer.n_iter,
-        batch_iter = config.optimizer.batch_iter,
-        batch_size = config.optimizer.batch_size,
-        key = jax.random.PRNGKey(config.model.seed),
+        adata=adata,
+        time_obs=config.dataset.time_obs,
+        obsm=config.dataset.obsm,
+        optimizer=optax.adam(config.optimizer.learning_rate),
+        n_iter=config.optimizer.n_iter,
+        batch_iter=config.optimizer.batch_iter,
+        batch_size=config.optimizer.batch_size,
+        key=jax.random.PRNGKey(config.model.seed),
     )
 
     # Use the trained model to create a potential function.
     potential_fn = lambda x: my_model.potential.apply(my_model.params, x)
 
     # Make a 3d scatter plot of the data.
-    fig = plt.figure(constrained_layout = True)
-    ax = fig.add_subplot(111, projection='3d', elev=30, azim=40)
+    fig = plt.figure(constrained_layout=True)
+    ax = fig.add_subplot(111, projection="3d", elev=30, azim=40)
     zz = potential_fn(jnp.array(adata.obsm[config.dataset.obsm]))
     xx = adata.obsm[config.dataset.obsm][:, 0]
     yy = adata.obsm[config.dataset.obsm][:, 1]
@@ -73,10 +73,10 @@ def main(config : DictConfig) -> None:
 
     # Plot the potential function as a surface.
     xx, yy = jnp.linspace(min(xx), max(xx), 50), jnp.linspace(min(yy), max(yy), 50)
-    xx, yy = jnp.meshgrid(xx, xx, indexing='xy')
+    xx, yy = jnp.meshgrid(xx, xx, indexing="xy")
     zz = potential_fn(jnp.stack([xx, yy], axis=-1))
     ax.plot_surface(xx, yy, zz, alpha=0.5, zorder=-1)
-    ax.contour(xx, yy, zz, zdir='z', offset=zz.min(), **config.plot.contour)
+    ax.contour(xx, yy, zz, zdir="z", offset=zz.min(), **config.plot.contour)
 
     # Decorate the plot.
     ax.set_xlabel(f"{config.dataset.obsm} 1")
@@ -84,6 +84,7 @@ def main(config : DictConfig) -> None:
     ax.set_zlabel("Potential")
     plt.title(config.plot.title)
     plt.show()
+
 
 if __name__ == "__main__":
     main()

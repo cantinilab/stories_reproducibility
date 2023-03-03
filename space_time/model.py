@@ -45,7 +45,9 @@ class SpaceTime:
     def fit(
         self,
         input_distributions: List[jnp.ndarray],  # (time, cells, dims)
-        optimizer: GradientTransformation = optax.chain(optax.zero_nans(), optax.adam(1e-2)),
+        optimizer: GradientTransformation = optax.chain(
+            optax.zero_nans(), optax.adam(1e-2)
+        ),
         n_iter: int = 100,
         batch_iter: int = 100,
         batch_size: int = None,
@@ -62,7 +64,9 @@ class SpaceTime:
         # TODO:  implement batching.
         # TODO:  implement tqdm.
 
-        def loss(params: optax.Params, batch: jnp.ndarray, batch_marginals: jnp.ndarray) -> jnp.ndarray:
+        def loss(
+            params: optax.Params, batch: jnp.ndarray, batch_marginals: jnp.ndarray
+        ) -> jnp.ndarray:
             # TODO: Make teacher forcing optional.
             # TODO: move epsilon and debias here.
 
@@ -77,10 +81,10 @@ class SpaceTime:
                 # Predict the timepoint t+1 using the proximal step.
                 pred = self.proximal_step.training_step(
                     _batch[t],  # Batch at time t
-                    potential_network = self.potential,
-                    potential_params = params,
-                    tau = self.tau,  # Time step
-                    a = _batch_marginals[t],  # Marginal at time t
+                    potential_network=self.potential,
+                    potential_params=params,
+                    tau=self.tau,  # Time step
+                    a=_batch_marginals[t],  # Marginal at time t
                 )
 
                 # Compute the loss between the predicted and the true next time step.
@@ -141,7 +145,7 @@ class SpaceTime:
         # Define the batch_size.
         if batch_size is None:
             batch_size = min([len(batch) for batch in input_distributions])
-        
+
         # Pad the input distributions with zeros if they are smaller than batch_size.
         padded_distributions = []
         padded_marginals = []
@@ -149,11 +153,13 @@ class SpaceTime:
             if len(timepoint) < batch_size:
 
                 # Pad the timepoint with zeros.
-                padded_distributions.append(jnp.pad(
-                    timepoint,
-                    ((0, batch_size - len(timepoint)), (0, 0)),
-                    mode="mean",
-                ))
+                padded_distributions.append(
+                    jnp.pad(
+                        timepoint,
+                        ((0, batch_size - len(timepoint)), (0, 0)),
+                        mode="mean",
+                    )
+                )
 
                 # Pad the marginals with zeros.
                 a = jnp.pad(
@@ -163,10 +169,12 @@ class SpaceTime:
                     constant_values=1e-6,
                 )
 
-                padded_marginals.append(a/a.sum())
+                padded_marginals.append(a / a.sum())
             else:
                 padded_distributions.append(timepoint)
-                padded_marginals.append(jnp.ones(timepoint.shape[0])/timepoint.shape[0])
+                padded_marginals.append(
+                    jnp.ones(timepoint.shape[0]) / timepoint.shape[0]
+                )
 
         # Initialize the parameters of the potential function.
         init_key, batch_key = jax.random.split(key)
@@ -190,9 +198,19 @@ class SpaceTime:
                     replace=False,
                 )
                 idx_list.append(idx_timepoint)
-        
-            batch = jnp.stack([timepoint[idx] for timepoint, idx in zip(padded_distributions, idx_list)])
-            batch_marginals = jnp.stack([timepoint[idx]/timepoint[idx].sum() for timepoint, idx in zip(padded_marginals, idx_list)])
+
+            batch = jnp.stack(
+                [
+                    timepoint[idx]
+                    for timepoint, idx in zip(padded_distributions, idx_list)
+                ]
+            )
+            batch_marginals = jnp.stack(
+                [
+                    timepoint[idx] / timepoint[idx].sum()
+                    for timepoint, idx in zip(padded_marginals, idx_list)
+                ]
+            )
 
             for batch_it in range(batch_iter):
 
@@ -205,7 +223,7 @@ class SpaceTime:
                 )
 
                 pbar.set_postfix({"loss": loss_value})
-    
+
     def fit_adata(
         self,
         adata: ad.AnnData,
@@ -214,7 +232,7 @@ class SpaceTime:
         **kwargs,
     ) -> None:
         """Fit the model to an AnnData object."""
-        
+
         # Check that we have a valid time observation.
         assert adata.obs[time_obs].dtype == int, "Time observations must be integers."
         timepoints = np.sort(np.unique(adata.obs[time_obs]))
@@ -245,7 +263,7 @@ class SpaceTime:
         key: PRNGKey = PRNGKey(0),
     ) -> ad.AnnData:
         """Fit the model to an AnnData object and transform the latest timepoint."""
-        
+
         self.fit_adata(
             adata=adata,
             time_obs=time_obs,

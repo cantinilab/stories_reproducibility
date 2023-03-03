@@ -19,7 +19,7 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
         epsilon: float = None,
         maxiter: int = 100,
         implicit_diff: bool = True,
-        sinkhorn_iter: int = 50
+        sinkhorn_iter: int = 50,
     ):
         self.epsilon = epsilon
         self.maxiter = maxiter
@@ -56,20 +56,24 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
             geom_xx = PointCloud(inner_x, inner_x, epsilon=self.epsilon)
             geom_yy = PointCloud(y, y, epsilon=self.epsilon)
             geom_xy = PointCloud(inner_x, y, epsilon=self.epsilon)
-            out = solver(QuadraticProblem(
-                geom_xx,
-                geom_yy,
-                geom_xy,
-                fused_penalty=fused,
-                a=inner_a,
-                b=inner_a,
-            ))
+            out = solver(
+                QuadraticProblem(
+                    geom_xx,
+                    geom_yy,
+                    geom_xy,
+                    fused_penalty=fused,
+                    a=inner_a,
+                    b=inner_a,
+                )
+            )
             cost = out.reg_gw_cost
 
             # Return the proximal cost
             return tau * jnp.sum(potential_fun(y)) + cost
 
-        gd = jaxopt.GradientDescent(fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff)
+        gd = jaxopt.GradientDescent(
+            fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff
+        )
         y, _ = gd.run(x, inner_x=x, inner_a=a)
         return y
 
@@ -95,12 +99,11 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
             jnp.array: The output distribution, size (N, d)
         """
 
-
         # Initialize the GW solver.
         solver = GromovWasserstein(
             min_iterations=self.sinkhorn_iter,
             max_iterations=self.sinkhorn_iter,
-            implicit_diff=None
+            implicit_diff=None,
         )
 
         def proximal_cost(
@@ -114,19 +117,25 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
             geom_xx = PointCloud(inner_x, inner_x, epsilon=self.epsilon)
             geom_yy = PointCloud(y, y, epsilon=self.epsilon)
             geom_xy = PointCloud(inner_x, y, epsilon=self.epsilon)
-            out = solver(QuadraticProblem(
-                geom_xx,
-                geom_yy,
-                geom_xy,
-                fused_penalty=fused,
-                a=inner_a,
-                b=inner_a,
-            ))
+            out = solver(
+                QuadraticProblem(
+                    geom_xx,
+                    geom_yy,
+                    geom_xy,
+                    fused_penalty=fused,
+                    a=inner_a,
+                    b=inner_a,
+                )
+            )
             cost = out.reg_gw_cost
 
             # Return the proximal cost
-            return tau * jnp.sum(potential_network.apply(inner_potential_params, y)) + cost
+            return (
+                tau * jnp.sum(potential_network.apply(inner_potential_params, y)) + cost
+            )
 
-        gd = jaxopt.GradientDescent(fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff)
+        gd = jaxopt.GradientDescent(
+            fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff
+        )
         y, _ = gd.run(x, inner_x=x, inner_potential_params=potential_params, inner_a=a)
         return y

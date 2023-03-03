@@ -12,8 +12,9 @@ def styblinski_potential(u: jnp.ndarray) -> jnp.ndarray:
 
     Returns:
         jnp.ndarray: _description_
-    """    
+    """
     return jnp.sum(u**4 - 16 * u**2 + 5 * u) / 2
+
 
 class MLPPotential(nn.Module):
     act_fn: callable = nn.softplus

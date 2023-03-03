@@ -8,7 +8,6 @@ import optax
 
 
 class ImplicitStep(abc.ABC):
-
     def inference_step(
         self,
         x: jnp.array,
@@ -27,7 +26,13 @@ class ImplicitStep(abc.ABC):
         """
         pass
 
-    def training_step(self, x: jnp.array, potential_network: nn.Module, potential_params: optax.Params, tau: float) -> jnp.array:
+    def training_step(
+        self,
+        x: jnp.array,
+        potential_network: nn.Module,
+        potential_params: optax.Params,
+        tau: float,
+    ) -> jnp.array:
         """Implicit proximal step with the Wasserstein distance.
 
         Args:

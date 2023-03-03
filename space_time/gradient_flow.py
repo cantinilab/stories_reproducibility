@@ -30,7 +30,11 @@ def gradient_flow(
     y = x.copy()
     yy = [y]
     print("Jitting the proximal step, this may take a while...")
-    jitted_inf_step = jit(lambda u: proximal_step.inference_step(u, potential_fun=potential_fun, tau=tau, **kwargs))
+    jitted_inf_step = jit(
+        lambda u: proximal_step.inference_step(
+            u, potential_fun=potential_fun, tau=tau, **kwargs
+        )
+    )
     for _ in tqdm(range(n_proximal_steps)):
         y = jitted_inf_step(y)
         yy.append(y)

@@ -24,7 +24,6 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         n, d = x.shape
         return grad(phi)(x.reshape(n, 1, d) - x.reshape(1, n, d))
 
-
     def kernel(self, x: jnp.array, phi: Callable) -> jnp.array:
         """Given a function $\phi : \mathbb R^d \to \mathbb R$, return the kernel
         $\Phi(x_i, x_j) = \nabla \phi(x_i - x_j)^T \nabla \phi(x_i - x_j)$ as a
@@ -40,7 +39,6 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         g = self.grad_phi(x, phi)
         n, _, d = g.shape
         return g.reshape(n, n, d, 1) @ g.reshape(n, n, 1, d)
-
 
     def inverse_partial_Q(
         self,
@@ -71,7 +69,6 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
 
         return jnp.linalg.tensorsolve(A, b, axes=(1, 3))
 
-
     def inference_step(
         self,
         x: jnp.array,
@@ -98,7 +95,6 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
 
         # Return the next timepoint.
         return x + tau * v
-
 
     def training_step(
         self,

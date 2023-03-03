@@ -32,7 +32,6 @@ class LinearExplicitStep(explicit_steps.ExplicitStep):
 
         return x - tau * vmap(grad(potential_fun))(x)
 
-
     def training_step(
         self,
         x: jnp.array,
