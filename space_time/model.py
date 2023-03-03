@@ -242,7 +242,6 @@ class SpaceTime:
         obsm: str = "pca",
         optimizer: GradientTransformation = optax.adam(learning_rate=1e-3),
         n_iter: int = 1_000,
-        dump_every: int = 100,
         key: PRNGKey = PRNGKey(0),
     ) -> ad.AnnData:
         """Fit the model to an AnnData object and transform the latest timepoint."""
@@ -253,7 +252,6 @@ class SpaceTime:
             obsm=obsm,
             optimizer=optimizer,
             n_iter=n_iter,
-            dump_every=dump_every,
             key=key,
         )
 
