@@ -21,11 +21,13 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
         maxiter: int = 100,
         sinkhorn_iter: int = 100,
         implicit_diff: bool = True,
+        # stepsize: float = 1e-2,
     ):
         self.epsilon = epsilon
         self.maxiter = maxiter
         self.sinkhorn_iter = sinkhorn_iter
         self.implicit_diff = implicit_diff
+        # self.stepsize = stepsize
 
     def inference_step(
         self,
@@ -85,7 +87,7 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
             jnp.array: The output distribution, size (N, d)
         """
 
-        solver = Sinkhorn(min_iterations=self.sinkhorn_iter, max_iterations=self.sinkhorn_iter)
+        solver = Sinkhorn(min_iterations=self.sinkhorn_iter, max_iterations=self.sinkhorn_iter, implicit_diff=None)
 
         def proximal_cost(y, inner_x, inner_potential_params, inner_a):
 
@@ -102,7 +104,12 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
             # Return the proximal cost
             return tau * jnp.sum(potential_network.apply(inner_potential_params, y)) + cost
 
-        # TODO: tolerance?
-        gd = jaxopt.GradientDescent(fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff)
+        # # TODO: tolerance?
+        gd = jaxopt.GradientDescent(
+            fun=proximal_cost,
+            maxiter=self.maxiter,
+            implicit_diff=self.implicit_diff,
+            # stepsize=self.stepsize,
+        )
         y, _ = gd.run(x, inner_x=x, inner_potential_params=potential_params, inner_a=a)
         return y
