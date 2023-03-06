@@ -26,6 +26,7 @@ class SpaceTime:
         tau: float = 1e-2,
         debias: bool = True,
         epsilon: float = 0.05,
+        teacher_forcing: bool = True,
     ):
         """Multi-modal Fused Gromov-Wasserstein gradient flow model for spatio-temporal omics data.
 
@@ -40,14 +41,13 @@ class SpaceTime:
         self.tau = tau
         self.debias = debias
         self.epsilon = epsilon
+        self.teacher_forcing = teacher_forcing
         self.proximal_step = proximal_step
 
     def fit(
         self,
         input_distributions: List[Dict],  # (time, cells, dims)
-        optimizer: GradientTransformation = optax.chain(
-            optax.zero_nans(), optax.adam(1e-2)
-        ),
+        optimizer: GradientTransformation = optax.adam(1e-2),
         n_iter: int = 100,
         batch_iter: int = 100,
         batch_size: int = None,
@@ -110,6 +110,26 @@ class SpaceTime:
                         b=_batch_marginals[t],
                     )
                     sink_loss -= 0.5 * sinkhorn_solver(problem).reg_ot_cost
+
+                # if no teacher-forcing, replace next overvation with predicted
+                _batch_x = jax.lax.cond(
+                    self.teacher_forcing,
+                    lambda u: u,
+                    lambda u: u.at[t + 1].set(pred_x),
+                    _batch_x,
+                )
+                _batch_space = jax.lax.cond(
+                    self.teacher_forcing,
+                    lambda u: u,
+                    lambda u: u.at[t + 1].set(pred_x),
+                    _batch_space,
+                )
+                _batch_marginals = jax.lax.cond(
+                    self.teacher_forcing,
+                    lambda u: u,
+                    lambda u: u.at[t + 1].set(_batch_marginals[t]),
+                    _batch_marginals,
+                )
 
                 # Return the data for the next iteration and the current loss.
                 # To remove teacher-forcing, this will have to be changed.

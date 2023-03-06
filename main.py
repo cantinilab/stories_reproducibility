@@ -9,7 +9,7 @@ from omegaconf import DictConfig
 from space_time import explicit_steps, implicit_steps, model, potentials
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="celegans")
+@hydra.main(version_base=None, config_path="configs", config_name="zebrafish")
 def main(config: DictConfig) -> None:
 
     # Load the data.
@@ -37,6 +37,7 @@ def main(config: DictConfig) -> None:
         tau=config.model.tau,
         debias=config.model.debias,
         epsilon=config.model.epsilon,
+        teacher_forcing=config.model.teacher_forcing,
     )
 
     # Fit the model.

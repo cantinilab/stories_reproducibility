@@ -10,6 +10,7 @@ model:
   epsilon: 0.01
   seed: 0
   proximal_step: "linear_explicit"
+  teacher_forcing: True
 
 potential:
   features: [64, 64]
