@@ -72,6 +72,7 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
     def inference_step(
         self,
         x: jnp.array,
+        space: jnp.array,
         potential_fun: Callable,
         tau: float,
         fused: float = 1,
@@ -99,6 +100,7 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
     def training_step(
         self,
         x: jnp.array,
+        space: jnp.array,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,

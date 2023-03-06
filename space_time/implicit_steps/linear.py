@@ -32,6 +32,7 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
     def inference_step(
         self,
         x: jnp.array,
+        space: jnp.array,
         potential_fun: Callable,
         tau: float,
         a: jnp.ndarray = None,
@@ -73,6 +74,7 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
     def training_step(
         self,
         x: jnp.array,
+        space: jnp.array,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,

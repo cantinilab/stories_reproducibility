@@ -1,4 +1,4 @@
-from typing import Callable, Iterable, List, Union
+from typing import Callable, Dict, Iterable, List, Union
 
 import anndata as ad
 import flax.linen as nn
@@ -44,7 +44,7 @@ class SpaceTime:
 
     def fit(
         self,
-        input_distributions: List[jnp.ndarray],  # (time, cells, dims)
+        input_distributions: List[Dict],  # (time, cells, dims)
         optimizer: GradientTransformation = optax.chain(
             optax.zero_nans(), optax.adam(1e-2)
         ),
@@ -65,7 +65,10 @@ class SpaceTime:
         # TODO:  implement tqdm.
 
         def loss(
-            params: optax.Params, batch: jnp.ndarray, batch_marginals: jnp.ndarray
+            params: optax.Params,
+            batch_x: jnp.ndarray,
+            batch_space: jnp.ndarray,
+            batch_marginals: jnp.ndarray,
         ) -> jnp.ndarray:
             # TODO: Make teacher forcing optional.
             # TODO: move epsilon and debias here.
@@ -76,11 +79,12 @@ class SpaceTime:
             def _through_time(carry, t):
                 """Helper function to compute the loss at a given timepoint."""
 
-                _batch, _batch_marginals = carry
+                _batch_x, _batch_space, _batch_marginals = carry
 
                 # Predict the timepoint t+1 using the proximal step.
                 pred = self.proximal_step.training_step(
-                    _batch[t],  # Batch at time t
+                    _batch_x[t],  # Batch at time t
+                    _batch_space[t],  # Batch at time t
                     potential_network=self.potential,
                     potential_params=params,
                     tau=self.tau,  # Time step
@@ -88,7 +92,7 @@ class SpaceTime:
                 )
 
                 # Compute the loss between the predicted and the true next time step.
-                geom_xy = PointCloud(pred, _batch[t + 1], epsilon=self.epsilon)
+                geom_xy = PointCloud(pred, _batch_x[t + 1], epsilon=self.epsilon)
                 problem = linear_problem.LinearProblem(
                     geom_xy,
                     a=_batch_marginals[t],
@@ -109,13 +113,13 @@ class SpaceTime:
 
                 # Return the data for the next iteration and the current loss.
                 # To remove teacher-forcing, this will have to be changed.
-                return (_batch, _batch_marginals), sink_loss
+                return (_batch_x, _batch_space, _batch_marginals), sink_loss
 
             # Iterate through timepoints efficiently. sink_loss becomes a 1-D array.
             _, sink_loss = jax.lax.scan(
                 _through_time,
-                (batch, batch_marginals),
-                jnp.arange(len(batch) - 1),  # All timepoints except the last one
+                (batch_x, batch_space, batch_marginals),
+                jnp.arange(len(batch_x) - 1),  # All timepoints except the last one
             )
 
             # Sum the losses over all timepoints.
@@ -125,13 +129,16 @@ class SpaceTime:
         def step(
             params: optax.Params,
             opt_state: optax.OptState,
-            batch: jnp.ndarray,
+            batch_x: jnp.ndarray,
+            batch_space: jnp.ndarray,
             batch_marginals: jnp.ndarray,
         ):
             """Jitted helper function to perform a single optimization step."""
 
             # Given a batch, compute the value and grad of the loss for current parameters.
-            loss_value, grads = jax.value_and_grad(loss)(params, batch, batch_marginals)
+            loss_value, grads = jax.value_and_grad(loss)(
+                params, batch_x, batch_space, batch_marginals
+            )
 
             # Using the computed gradients, update the optimizer.
             updates, opt_state = optimizer.update(grads, opt_state, params)
@@ -144,41 +151,50 @@ class SpaceTime:
 
         # Define the batch_size.
         if batch_size is None:
-            batch_size = min([len(batch) for batch in input_distributions])
+            batch_size = min([len(dist["x"]) for dist in input_distributions])
 
         # Pad the input distributions with zeros if they are smaller than batch_size.
-        padded_distributions = []
+        padded_x_distributions = []
+        padded_space_distributions = []
         padded_marginals = []
         for timepoint in input_distributions:
-            if len(timepoint) < batch_size:
+            x, space = timepoint["x"], timepoint["space"]
+            if len(x) < batch_size:
 
                 # Pad the timepoint with zeros.
-                padded_distributions.append(
+                padded_x_distributions.append(
                     jnp.pad(
-                        timepoint,
-                        ((0, batch_size - len(timepoint)), (0, 0)),
+                        x,
+                        ((0, batch_size - len(x)), (0, 0)),
+                        mode="mean",
+                    )
+                )
+
+                padded_space_distributions.append(
+                    jnp.pad(
+                        space,
+                        ((0, batch_size - len(space)), (0, 0)),
                         mode="mean",
                     )
                 )
 
                 # Pad the marginals with zeros.
                 a = jnp.pad(
-                    jnp.ones(timepoint.shape[0]),
-                    (0, batch_size - len(timepoint)),
+                    jnp.ones(x.shape[0]),
+                    (0, batch_size - len(x)),
                     mode="constant",
                     constant_values=1e-6,
                 )
 
                 padded_marginals.append(a / a.sum())
             else:
-                padded_distributions.append(timepoint)
-                padded_marginals.append(
-                    jnp.ones(timepoint.shape[0]) / timepoint.shape[0]
-                )
+                padded_x_distributions.append(x)
+                padded_space_distributions.append(space)
+                padded_marginals.append(jnp.ones(x.shape[0]) / x.shape[0])
 
         # Initialize the parameters of the potential function.
         init_key, batch_key = jax.random.split(key)
-        self.params = self.potential.init(init_key, padded_distributions[0])
+        self.params = self.potential.init(init_key, padded_x_distributions[0])
 
         # Initialize the optimizer.
         opt_state = optimizer.init(self.params)
@@ -189,7 +205,7 @@ class SpaceTime:
 
             # Sample a batch of cells from each timepoint.
             idx_list = []
-            for timepoint in padded_distributions:
+            for timepoint in padded_x_distributions:
                 timepoint_key, batch_key = jax.random.split(batch_key)
                 idx_timepoint = jax.random.choice(
                     timepoint_key,
@@ -199,10 +215,16 @@ class SpaceTime:
                 )
                 idx_list.append(idx_timepoint)
 
-            batch = jnp.stack(
+            batch_x = jnp.stack(
                 [
                     timepoint[idx]
-                    for timepoint, idx in zip(padded_distributions, idx_list)
+                    for timepoint, idx in zip(padded_x_distributions, idx_list)
+                ]
+            )
+            batch_space = jnp.stack(
+                [
+                    timepoint[idx]
+                    for timepoint, idx in zip(padded_space_distributions, idx_list)
                 ]
             )
             batch_marginals = jnp.stack(
@@ -218,7 +240,8 @@ class SpaceTime:
                 self.params, opt_state, loss_value = step(
                     self.params,
                     opt_state=opt_state,
-                    batch=jnp.stack(batch),
+                    batch_x=jnp.stack(batch_x),
+                    batch_space=jnp.stack(batch_space),
                     batch_marginals=jnp.stack(batch_marginals),
                 )
 
@@ -228,7 +251,8 @@ class SpaceTime:
         self,
         adata: ad.AnnData,
         time_obs: str,
-        obsm: str = "pca",
+        obsm: str = "X_pca",
+        space_obsm: str = "X_space",
         **kwargs,
     ) -> None:
         """Fit the model to an AnnData object."""
@@ -241,7 +265,13 @@ class SpaceTime:
         input_distributions = []
         for t in timepoints:
             x = jnp.array(adata[adata.obs[time_obs] == t].obsm[obsm])
-            input_distributions.append(x)
+            space = jnp.array(adata[adata.obs[time_obs] == t].obsm[space_obsm])
+            input_distributions.append(
+                {
+                    "x": x,
+                    "space": space,
+                }
+            )
 
         # Fit the model to the input distributions.
         self.fit(
@@ -257,7 +287,8 @@ class SpaceTime:
         self,
         adata: ad.AnnData,
         time_obs: str,
-        obsm: str = "pca",
+        obsm: str = "X_pca",
+        space_obsm: str = "X_space",
         optimizer: GradientTransformation = optax.adam(learning_rate=1e-3),
         n_iter: int = 1_000,
         key: PRNGKey = PRNGKey(0),
@@ -268,6 +299,7 @@ class SpaceTime:
             adata=adata,
             time_obs=time_obs,
             obsm=obsm,
+            space_obsm=space_obsm,
             optimizer=optimizer,
             n_iter=n_iter,
             key=key,

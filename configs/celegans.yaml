@@ -1,6 +1,7 @@
 dataset:
   path: "/users/csb/huizing/Documents/PhD/Data/c_elegans_embryos/c_elegans_embryos.h5ad"
   obsm: "X_phate"
+  space_obsm: "X_space"
   time_obs: "time"
 
 model:
@@ -8,7 +9,7 @@ model:
   debias: True
   epsilon: 0.01
   seed: 0
-  proximal_step: "quadratic_implicit"
+  proximal_step: "linear_explicit"
 
 potential:
   features: [64, 64]

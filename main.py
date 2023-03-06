@@ -44,6 +44,7 @@ def main(config: DictConfig) -> None:
         adata=adata,
         time_obs=config.dataset.time_obs,
         obsm=config.dataset.obsm,
+        space_obsm=config.dataset.space_obsm,
         optimizer=optax.adam(config.optimizer.learning_rate),
         n_iter=config.optimizer.n_iter,
         batch_iter=config.optimizer.batch_iter,

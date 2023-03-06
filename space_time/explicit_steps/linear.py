@@ -13,6 +13,7 @@ class LinearExplicitStep(explicit_steps.ExplicitStep):
     def inference_step(
         self,
         x: jnp.array,
+        space: jnp.array,
         potential_fun: Callable,
         tau: float,
         a: jnp.ndarray = None,
@@ -35,6 +36,7 @@ class LinearExplicitStep(explicit_steps.ExplicitStep):
     def training_step(
         self,
         x: jnp.array,
+        space: jnp.array,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
