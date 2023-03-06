@@ -76,7 +76,7 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
             fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff
         )
         y, _ = gd.run(x, inner_x=x, inner_a=a)
-        return y
+        return y, space
 
     def training_step(
         self,
@@ -140,4 +140,4 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
             fun=proximal_cost, maxiter=self.maxiter, implicit_diff=self.implicit_diff
         )
         y, _ = gd.run(x, inner_x=x, inner_potential_params=potential_params, inner_a=a)
-        return y
+        return y, space

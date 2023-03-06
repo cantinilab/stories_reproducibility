@@ -31,7 +31,7 @@ class LinearExplicitStep(explicit_steps.ExplicitStep):
             jnp.array: The output distribution, size (N, d)
         """
 
-        return x - tau * vmap(grad(potential_fun))(x)
+        return x - tau * vmap(grad(potential_fun))(x), space
 
     def training_step(
         self,
@@ -57,4 +57,4 @@ class LinearExplicitStep(explicit_steps.ExplicitStep):
         """
 
         potential_fun = lambda u: potential_network.apply(potential_params, u)
-        return x - tau * vmap(grad(potential_fun))(x)
+        return x - tau * vmap(grad(potential_fun))(x), space

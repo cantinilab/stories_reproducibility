@@ -82,7 +82,7 @@ class SpaceTime:
                 _batch_x, _batch_space, _batch_marginals = carry
 
                 # Predict the timepoint t+1 using the proximal step.
-                pred = self.proximal_step.training_step(
+                pred_x, pred_space = self.proximal_step.training_step(
                     _batch_x[t],  # Batch at time t
                     _batch_space[t],  # Batch at time t
                     potential_network=self.potential,
@@ -92,7 +92,7 @@ class SpaceTime:
                 )
 
                 # Compute the loss between the predicted and the true next time step.
-                geom_xy = PointCloud(pred, _batch_x[t + 1], epsilon=self.epsilon)
+                geom_xy = PointCloud(pred_x, _batch_x[t + 1], epsilon=self.epsilon)
                 problem = linear_problem.LinearProblem(
                     geom_xy,
                     a=_batch_marginals[t],
@@ -103,7 +103,7 @@ class SpaceTime:
                 # If debiasing is enabled, compute the terms of the Sinkhorn divergence.
                 # We only need the term xx, because the term yy is a constant.
                 if self.debias:
-                    geom_xx = PointCloud(pred, pred, epsilon=self.epsilon)
+                    geom_xx = PointCloud(pred_x, pred_x, epsilon=self.epsilon)
                     problem = linear_problem.LinearProblem(
                         geom_xx,
                         a=_batch_marginals[t],
@@ -240,9 +240,9 @@ class SpaceTime:
                 self.params, opt_state, loss_value = step(
                     self.params,
                     opt_state=opt_state,
-                    batch_x=jnp.stack(batch_x),
-                    batch_space=jnp.stack(batch_space),
-                    batch_marginals=jnp.stack(batch_marginals),
+                    batch_x=batch_x,
+                    batch_space=batch_space,
+                    batch_marginals=batch_marginals,
                 )
 
                 pbar.set_postfix({"loss": loss_value})

@@ -24,7 +24,7 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         n, d = x.shape
         return grad(phi)(x.reshape(n, 1, d) - x.reshape(1, n, d))
 
-    def kernel(self, x: jnp.array, phi: Callable) -> jnp.array:
+    def kernel(self, x: jnp.array, space: jnp.array, phi: Callable) -> jnp.array:
         """Given a function $\phi : \mathbb R^d \to \mathbb R$, return the kernel
         $\Phi(x_i, x_j) = \nabla \phi(x_i - x_j)^T \nabla \phi(x_i - x_j)$ as a
         jnp.array of size (N, N, d, d).
@@ -36,13 +36,26 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         Returns:
             jnp.array: The kernel $\Phi(x_i, x_j)$, a jnp.array of size (N, N, d, d).
         """
-        g = self.grad_phi(x, phi)
-        n, _, d = g.shape
-        return g.reshape(n, n, d, 1) @ g.reshape(n, n, 1, d)
+        g_xx = self.grad_phi(x, phi)
+        n, _, dx = g_xx.shape
+
+        g_ss = self.grad_phi(space, phi)
+        n, _, ds = g_ss.shape
+
+        k_xx = g_xx.reshape(n, n, dx, 1) @ g_xx.reshape(n, n, 1, dx)
+        k_xs = g_xx.reshape(n, n, dx, 1) @ g_ss.reshape(n, n, 1, ds)
+        k_sx = g_ss.reshape(n, n, ds, 1) @ g_xx.reshape(n, n, 1, dx)
+        k_ss = g_ss.reshape(n, n, ds, 1) @ g_ss.reshape(n, n, 1, ds)
+
+        k_x = jnp.concatenate((k_xx, k_xs), axis=3)
+        k_s = jnp.concatenate((k_sx, k_ss), axis=3)
+
+        return jnp.concatenate((k_x, k_s), axis=2)
 
     def inverse_partial_Q(
         self,
         x: jnp.array,
+        space: jnp.array,
         potential_fun: Callable,
         phi: Callable,
         fused: float,
@@ -60,12 +73,14 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
             jnp.array: The velocity vector field v as a jnp.array of size (N, d).
         """
 
-        n, d = x.shape
-        Phi = self.kernel(x, phi)
+        n, dx = x.shape
+        n, ds = space.shape
+        Phi = self.kernel(x, space, phi)
 
         A = jnp.einsum("ij,ipkl->ijkl", jnp.eye(n), Phi) - Phi
-        A += fused * jnp.einsum("ij,kl->ijkl", jnp.eye(n), jnp.eye(d))
+        A += fused * jnp.einsum("ij,kl->ijkl", jnp.eye(n), jnp.eye(dx + ds))
         b = -vmap(grad(potential_fun))(x)
+        b = jnp.concatenate((b, jnp.zeros((n, ds))), axis=1)
 
         return jnp.linalg.tensorsolve(A, b, axes=(1, 3))
 
@@ -92,10 +107,13 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
             jnp.array: The output distribution, size (N, d)
         """
         # Compute the velocity vector field v.
-        v = self.inverse_partial_Q(x, potential_fun, phi, fused)
+        v = self.inverse_partial_Q(x, space, potential_fun, phi, fused)
+
+        print("sum of v_x: ", jnp.sum(v[:, : x.shape[1]]))
+        print("sum of v_space: ", jnp.sum(v[:, x.shape[1] :]))
 
         # Return the next timepoint.
-        return x + tau * v
+        return x + tau * v[:, : x.shape[1]], space + tau * v[:, x.shape[1] :]
 
     def training_step(
         self,
@@ -122,7 +140,7 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         """
         # Compute the velocity vector field v.
         potential_fun = lambda u: potential_network.apply(potential_params, u)
-        v = self.inverse_partial_Q(x, potential_fun, phi, fused)
+        v = self.inverse_partial_Q(x, space, potential_fun, phi, fused)
 
         # Return the next timepoint.
-        return x + tau * v
+        return x + tau * v[:, : x.shape[1]], space + tau * v[:, x.shape[1] :]
