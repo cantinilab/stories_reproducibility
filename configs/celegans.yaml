@@ -9,7 +9,7 @@ model:
   debias: True
   epsilon: 0.01
   seed: 0
-  proximal_step: "quadratic_explicit"
+  proximal_step: "linear_explicit"
 
 potential:
   features: [64, 64]
