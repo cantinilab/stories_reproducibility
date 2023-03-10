@@ -9,7 +9,7 @@ from omegaconf import DictConfig
 from space_time import explicit_steps, implicit_steps, model, potentials
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="zebrafish")
+@hydra.main(version_base=None, config_path="configs", config_name="celegans")
 def main(config: DictConfig) -> None:
 
     # Load the data.
@@ -55,6 +55,13 @@ def main(config: DictConfig) -> None:
 
     # Use the trained model to create a potential function.
     potential_fn = lambda x: my_model.potential.apply(my_model.params, x)
+
+    # Try inference.
+    max_time = max(adata.obs[config.dataset.time_obs])
+    idx = adata.obs[config.dataset.time_obs] == max_time
+    x = adata[idx].obsm[config.dataset.obsm]
+    space = adata[idx].obsm[config.dataset.space_obsm]
+    my_model.transform(x, space)
 
     # Make a 3d scatter plot of the data.
     fig = plt.figure(constrained_layout=True)

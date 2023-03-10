@@ -10,7 +10,7 @@ model:
   seed: 0
   epsilon: 0.01
   proximal_step: "linear_explicit"
-  teacher_forcing: False
+  teacher_forcing: True
 
 potential:
   features: [64, 64]
@@ -22,7 +22,7 @@ optimizer:
   batch_size: 20
 
 plot:
-  title: "Energy landscape of Zebrafish embroyogenesis"
+  title: "Energy landscape of Zebrafish development"
   contour:
     levels: 30
     alpha: 0.5

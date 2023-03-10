@@ -30,10 +30,10 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
         self,
         x: jnp.array,
         space: jnp.array,
+        a: jnp.ndarray,
         potential_fun: Callable,
         tau: float,
         fused: float = 1.0,
-        a: jnp.ndarray = None,
     ) -> jnp.array:
         """Implicit proximal step with the Gromov-Wasserstein distance.
 
@@ -82,11 +82,11 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
         self,
         x: jnp.array,
         space: jnp.array,
+        a: jnp.ndarray,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
         fused: float = 1.0,
-        a: jnp.ndarray = None,
     ) -> jnp.array:
         """Implicit proximal step with the Gromov-Wasserstein distance.
 

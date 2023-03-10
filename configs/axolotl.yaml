@@ -1,12 +1,15 @@
 dataset:
   path: "/users/csb/huizing/Documents/PhD/Data/axolotl/Regeneration_processed.h5ad"
   obsm: "X_umap"
+  space_obsm: "X_spatial"
   time_obs: "time"
 
 model:
   tau: 0.001
   debias: True
   epsilon: 0.01
+  teacher_forcing: True
+  proximal_step: "quadratic_explicit"
   seed: 0
 
 potential:
@@ -14,9 +17,9 @@ potential:
 
 optimizer:
   learning_rate: 0.01
-  n_iter: 100
-  batch_iter: 100
-  batch_size: 50
+  n_iter: 50
+  batch_iter: 50
+  batch_size: 20
 
 plot:
   title: "Energy landscape of Axolotl brain regeneration"

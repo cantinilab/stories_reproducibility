@@ -14,9 +14,9 @@ class LinearExplicitStep(explicit_steps.ExplicitStep):
         self,
         x: jnp.array,
         space: jnp.array,
+        a: jnp.ndarray,
         potential_fun: Callable,
         tau: float,
-        a: jnp.ndarray = None,
     ) -> jnp.array:
         """Explicit proximal step with the Wasserstein distance. This "inference" step uses a
         callable potential function, while the "training" step requires a neural network and
@@ -37,10 +37,10 @@ class LinearExplicitStep(explicit_steps.ExplicitStep):
         self,
         x: jnp.array,
         space: jnp.array,
+        a: jnp.ndarray,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
-        a: jnp.ndarray = None,
     ) -> jnp.array:
         """Explicit proximal step with the Wasserstein distance. This "training" step uses a
         neural network and its parameters to perform the step, while the "inference" step

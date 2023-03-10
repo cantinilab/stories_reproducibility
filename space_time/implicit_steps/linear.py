@@ -33,9 +33,9 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
         self,
         x: jnp.array,
         space: jnp.array,
+        a: jnp.ndarray,
         potential_fun: Callable,
         tau: float,
-        a: jnp.ndarray = None,
     ) -> jnp.array:
         """Implicit proximal step with the Wasserstein distance.
 
@@ -75,10 +75,10 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
         self,
         x: jnp.array,
         space: jnp.array,
+        a: jnp.ndarray,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
-        a: jnp.ndarray = None,
     ) -> jnp.array:
         """Implicit proximal step with the Wasserstein distance.
 
@@ -114,12 +114,10 @@ class LinearImplicitStep(implicit_steps.ImplicitStep):
                 tau * jnp.sum(potential_network.apply(inner_potential_params, y)) + cost
             )
 
-        # # TODO: tolerance?
         gd = jaxopt.GradientDescent(
             fun=proximal_cost,
             maxiter=self.maxiter,
             implicit_diff=self.implicit_diff,
-            # stepsize=self.stepsize,
         )
         y, _ = gd.run(x, inner_x=x, inner_potential_params=potential_params, inner_a=a)
         return y, space

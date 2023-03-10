@@ -85,10 +85,10 @@ class SpaceTime:
                 pred_x, pred_space = self.proximal_step.training_step(
                     _batch_x[t],  # Batch at time t
                     _batch_space[t],  # Batch at time t
+                    _batch_marginals[t],  # Marginal at time t
                     potential_network=self.potential,
                     potential_params=params,
                     tau=self.tau,  # Time step
-                    a=_batch_marginals[t],  # Marginal at time t
                 )
 
                 # Compute the loss between the predicted and the true next time step.
@@ -173,7 +173,7 @@ class SpaceTime:
         if batch_size is None:
             batch_size = min([len(dist["x"]) for dist in input_distributions])
 
-        # Pad the input distributions with zeros if they are smaller than batch_size.
+        # Pad the input distributions with contants if they are smaller than batch_size.
         padded_x_distributions = []
         padded_space_distributions = []
         padded_marginals = []
@@ -181,7 +181,7 @@ class SpaceTime:
             x, space = timepoint["x"], timepoint["space"]
             if len(x) < batch_size:
 
-                # Pad the timepoint with zeros.
+                # Pad the timepoint with constants.
                 padded_x_distributions.append(
                     jnp.pad(
                         x,
@@ -327,7 +327,7 @@ class SpaceTime:
 
         return self.transform_adata(adata)
 
-    def transform(self, x: jnp.ndarray) -> jnp.ndarray:
+    def transform(self, x: jnp.ndarray, space: jnp.ndarray, **kwargs) -> jnp.ndarray:
         """Transform a distribution using the learned potential.
 
         Args:
@@ -338,8 +338,10 @@ class SpaceTime:
         """
         return self.proximal_step.inference_step(
             x,
+            space,
             lambda x: self.potential.apply(self.params, x),  # Potential function
             self.tau,  # Time step
+            **kwargs,
         )
 
     def fit_transform(
