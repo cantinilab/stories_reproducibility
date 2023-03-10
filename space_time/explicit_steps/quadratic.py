@@ -126,7 +126,6 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         potential_params: optax.Params,
         tau: float,
         fused: float = 1,
-        dummy_var: jnp.ndarray = jnp.array(0),
         phi: Callable = lambda u: jnp.linalg.norm(u) ** 2,
     ) -> jnp.array:
         """Explicit proximal step using the Gromov-Wasserstein distance.
