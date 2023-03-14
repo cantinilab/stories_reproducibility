@@ -13,12 +13,15 @@ from space_time import explicit_steps, implicit_steps, model, potentials
 def main(config: DictConfig) -> None:
 
     # Load the data.
+    print("Loading data")
     adata = ad.read_h5ad(config.dataset.path)
 
     # Define the protential.
+    print("Defining potential")
     potential = potentials.MLPPotential(features=config.potential.features)
 
     # Define the proximal step.
+    print("Defining proximal step")
     if config.model.proximal_step == "linear_explicit":
         proximal_step = explicit_steps.linear.LinearExplicitStep()
     elif config.model.proximal_step == "quadratic_explicit":
@@ -31,6 +34,7 @@ def main(config: DictConfig) -> None:
         raise ValueError(f"Proximal step {config.model.proximal_step} not recognized.")
 
     # Define the model.
+    print("Defining model")
     my_model = model.SpaceTime(
         potential=potential,
         proximal_step=proximal_step,
