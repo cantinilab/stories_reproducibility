@@ -1,0 +1,22 @@
+potential:
+  ground_truth: "styblinski"
+  features: [32, 32]
+
+grid:
+  scale: 4.5
+  number: 100
+
+population:
+  n_cells: 10
+  n_genes: 2
+  n_dims: 2
+
+evolution:
+  n_timepoints: 20
+
+model:
+  tau: 1.0
+  n_iter: 1
+  batch_iter: 1
+  batch_size:
+  learning_rate: 0.01

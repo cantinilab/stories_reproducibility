@@ -1,0 +1,7 @@
+type: "quadratic_implicit"
+epsilon: 1.0
+maxiter: 20
+sinkhorn_iter: 50
+implicit_diff: true
+tau: 0.01
+fused: 1.0

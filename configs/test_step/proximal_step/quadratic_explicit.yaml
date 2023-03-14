@@ -1,0 +1,5 @@
+type: "quadratic_explicit"
+fused: 1.0
+cross: 1.0
+straight: 1.0
+tau: 0.02
