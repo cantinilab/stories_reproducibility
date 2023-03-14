@@ -10,6 +10,16 @@ from space_time import explicit_steps
 class QuadraticExplicitStep(explicit_steps.ExplicitStep):
     """Explicit proximal step with the Gromov Wasserstein distance."""
 
+    def __init__(
+        self,
+        fused: float = 1.0,
+        cross: float = 1.0,
+        straight: float = 1.0,
+    ):
+        self.fused = fused
+        self.cross = cross
+        self.straight = straight
+
     def grad_phi(self, x: jnp.array, phi: Callable) -> jnp.array:
         """Given a function $\phi : \mathbb R^d \to \mathbb R$,
         return $\nabla \phi(x_i - x_j)$ as a jnp.array of size (N, N, d).
@@ -47,8 +57,17 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         grad_phi = jnp.concatenate((g_xx, g_ss), axis=2)
 
         n, _, d = grad_phi.shape
+        k = grad_phi.reshape(n, n, d, 1) @ grad_phi.reshape(n, n, 1, d)
 
-        return grad_phi.reshape(n, n, d, 1) @ grad_phi.reshape(n, n, 1, d)
+        d1, d2 = x.shape[1], space.shape[1]
+        u_xx = self.straight * jnp.ones((d1, d1))
+        u_xs = self.cross * jnp.ones((d1, d2))
+        u_ss = self.straight * jnp.ones((d2, d2))
+        u_sx = self.cross * jnp.ones((d2, d1))
+
+        u = jnp.block([[u_xx, u_xs], [u_sx, u_ss]])
+
+        return jnp.einsum("ijkl,kl->ijkl", k, u)
 
     def inverse_partial_Q(
         self,
@@ -96,7 +115,6 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         a: jnp.ndarray,
         potential_fun: Callable,
         tau: float,
-        fused: float = 1,
         phi: Callable = lambda u: jnp.linalg.norm(u) ** 2,
     ) -> jnp.ndarray:
         """Explicit proximal step using the Gromov-Wasserstein distance.
@@ -112,7 +130,7 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
             jnp.array: The output distribution, size (N, d)
         """
         # Compute the velocity vector field v.
-        v = self.inverse_partial_Q(x, space, a, potential_fun, phi, fused)
+        v = self.inverse_partial_Q(x, space, a, potential_fun, phi, self.fused)
 
         # Return the next timepoint.
         return x + tau * v[:, : x.shape[1]], space + tau * v[:, x.shape[1] :]
@@ -125,7 +143,6 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
-        fused: float = 1,
         phi: Callable = lambda u: jnp.linalg.norm(u) ** 2,
     ) -> jnp.array:
         """Explicit proximal step using the Gromov-Wasserstein distance.
@@ -142,7 +159,7 @@ class QuadraticExplicitStep(explicit_steps.ExplicitStep):
         """
         # Compute the velocity vector field v.
         potential_fun = lambda u: potential_network.apply(potential_params, u)
-        v = self.inverse_partial_Q(x, space, a, potential_fun, phi, fused)
+        v = self.inverse_partial_Q(x, space, a, potential_fun, phi, self.fused)
 
         # Return the next timepoint.
         return x + tau * v[:, : x.shape[1]], space + tau * v[:, x.shape[1] :]
