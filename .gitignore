@@ -1,3 +1,6 @@
+# weights and biases
+wandb/
+
 # Hydra
 outputs/
 
