@@ -12,11 +12,20 @@ population:
   n_dims: 2
 
 evolution:
-  n_timepoints: 20
+  n_timepoints: 15
 
 model:
   tau: 1.0
   n_iter: 1
-  batch_iter: 1
+  batch_iter: 500
   batch_size:
   learning_rate: 0.01
+  quadratic: false
+  teacher_forcing: false
+
+wandb:
+  mode: "online"
+
+defaults:
+  - _self_
+  - override hydra/launcher: gpu

@@ -1,33 +1,4 @@
-dataset:
-  path: "/users/csb/huizing/Documents/PhD/Data/zesta/spatial_sixtime_slice_stereoseq_processed.h5ad"
-  space_obsm: "X_space"
-  obsm: "X_phate"
-  time_obs: "time"
-
-model:
-  tau: 0.001
-  debias: True
-  seed: 0
-  epsilon: 0.01
-  proximal_step: "linear_explicit"
-  teacher_forcing: True
-
-potential:
-  features: [64, 64]
-
-optimizer:
-  learning_rate: 0.01
-  n_iter: 50
-  batch_iter: 50
-  batch_size: 20
-
-plot:
-  title: "Energy landscape of Zebrafish development"
-  contour:
-    levels: 30
-    alpha: 0.5
-    linewidths: 0.5
-  scatter:
-    size: 20
-    alpha: 1
-    cmap: "viridis"
+path: "/users/csb/huizing/Documents/PhD/Data/zesta/spatial_sixtime_slice_stereoseq_processed.h5ad"
+space_obsm: "X_space"
+obsm: "X_phate"
+time_obs: "time"
