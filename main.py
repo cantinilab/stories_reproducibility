@@ -1,87 +1,133 @@
 # Imports
-import anndata as ad
 import hydra
-import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import optax
-from omegaconf import DictConfig
-from space_time import explicit_steps, implicit_steps, model, potentials
+import wandb
+from flatten_dict import flatten
+from omegaconf import DictConfig, OmegaConf
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="celegans")
-def main(config: DictConfig) -> None:
+def main(cfg: DictConfig) -> None:
+
+    import anndata as ad
+    import jax
+    import jax.numpy as jnp
+    import optax
+    from space_time import explicit_steps, implicit_steps, model, potentials
+
+    # start a new wandb run to track this script
+    print(dict(cfg))
+    print(f"JAX device type: {jax.devices()[0].device_kind}")
+
+    wandb.init(
+        project="spacetime-main",
+        config=flatten(OmegaConf.to_container(cfg), reducer="dot"),
+        mode=cfg.wandb.mode,
+    )
 
     # Load the data.
     print("Loading data")
-    adata = ad.read_h5ad(config.dataset.path)
+    adata = ad.read_h5ad(cfg.dataset.path)
 
     # Define the protential.
     print("Defining potential")
-    potential = potentials.MLPPotential(features=config.potential.features)
+    potential = potentials.MLPPotential(features=cfg.potential.features)
 
     # Define the proximal step.
     print("Defining proximal step")
-    if config.model.proximal_step == "linear_explicit":
+    if cfg.proximal_step.type == "linear_explicit":
         proximal_step = explicit_steps.linear.LinearExplicitStep()
-    elif config.model.proximal_step == "quadratic_explicit":
-        proximal_step = explicit_steps.quadratic.QuadraticExplicitStep()
-    elif config.model.proximal_step == "linear_implicit":
-        proximal_step = implicit_steps.linear.LinearImplicitStep()
-    elif config.model.proximal_step == "quadratic_implicit":
-        proximal_step = implicit_steps.quadratic.QuadraticImplicitStep()
+    elif cfg.proximal_step.type == "quadratic_explicit":
+        proximal_step = explicit_steps.quadratic.QuadraticExplicitStep(
+            fused=cfg.proximal_step.fused,
+            cross=cfg.proximal_step.cross,
+            straight=cfg.proximal_step.straight,
+        )
+    elif cfg.proximal_step.type == "linear_implicit":
+        proximal_step = implicit_steps.linear.LinearImplicitStep(
+            epsilon=cfg.proximal_step.epsilon,
+            maxiter=cfg.proximal_step.maxiter,
+            sinkhorn_iter=cfg.proximal_step.sinkhorn_iter,
+            implicit_diff=cfg.proximal_step.implicit_diff,
+            wb=True,
+        )
+    elif cfg.proximal_step.type == "quadratic_implicit":
+        proximal_step = implicit_steps.quadratic.QuadraticImplicitStep(
+            sinkhorn_iter=cfg.proximal_step.sinkhorn_iter,
+            epsilon=cfg.proximal_step.epsilon,
+            fused=cfg.proximal_step.fused,
+            maxiter=cfg.proximal_step.maxiter,
+            implicit_diff=cfg.proximal_step.implicit_diff,
+            wb=True,
+        )
+    elif cfg.proximal_step.type == "monge_linear_implicit":
+        proximal_step = implicit_steps.monge_linear.MongeLinearImplicitStep(
+            maxiter=cfg.proximal_step.maxiter,
+            implicit_diff=cfg.proximal_step.implicit_diff,
+            wb=True,
+        )
+    elif cfg.proximal_step.type == "monge_quadratic_implicit":
+        proximal_step = implicit_steps.monge_quadratic.MongeQuadraticImplicitStep(
+            fused=cfg.proximal_step.fused,
+            cross=cfg.proximal_step.cross,
+            straight=cfg.proximal_step.straight,
+            implicit_diff=cfg.proximal_step.implicit_diff,
+            wb=True,
+            maxiter=cfg.proximal_step.maxiter,
+        )
     else:
-        raise ValueError(f"Proximal step {config.model.proximal_step} not recognized.")
+        raise ValueError(f"Step {cfg.proximal_step.type} not recognized.")
 
     # Define the model.
     print("Defining model")
     my_model = model.SpaceTime(
         potential=potential,
         proximal_step=proximal_step,
-        tau=config.model.tau,
-        debias=config.model.debias,
-        epsilon=config.model.epsilon,
-        teacher_forcing=config.model.teacher_forcing,
+        tau=cfg.model.tau,
+        debias=cfg.model.debias,
+        epsilon=cfg.model.epsilon,
+        teacher_forcing=cfg.model.teacher_forcing,
+        wb=True,
     )
 
     # Fit the model.
     my_model.fit_adata(
         adata=adata,
-        time_obs=config.dataset.time_obs,
-        obsm=config.dataset.obsm,
-        space_obsm=config.dataset.space_obsm,
-        optimizer=optax.adam(config.optimizer.learning_rate),
-        n_iter=config.optimizer.n_iter,
-        batch_iter=config.optimizer.batch_iter,
-        batch_size=config.optimizer.batch_size,
-        key=jax.random.PRNGKey(config.model.seed),
+        time_obs=cfg.dataset.time_obs,
+        obsm=cfg.dataset.obsm,
+        space_obsm=cfg.dataset.space_obsm,
+        optimizer=optax.adam(cfg.optimizer.learning_rate),
+        n_iter=cfg.optimizer.n_iter,
+        batch_iter=cfg.optimizer.batch_iter,
+        batch_size=cfg.optimizer.batch_size,
+        key=jax.random.PRNGKey(cfg.model.seed),
     )
 
     # Use the trained model to create a potential function.
     potential_fn = lambda x: my_model.potential.apply(my_model.params, x)
 
     # Try inference.
-    max_time = max(adata.obs[config.dataset.time_obs])
-    idx = adata.obs[config.dataset.time_obs] == max_time
-    x = adata[idx].obsm[config.dataset.obsm]
-    space = adata[idx].obsm[config.dataset.space_obsm]
+    max_time = max(adata.obs[cfg.dataset.time_obs])
+    idx = adata.obs[cfg.dataset.time_obs] == max_time
+    x = adata[idx].obsm[cfg.dataset.obsm]
+    space = adata[idx].obsm[cfg.dataset.space_obsm]
     my_model.transform(x, space)
 
     # Make a 3d scatter plot of the data.
     fig = plt.figure(constrained_layout=True)
     ax = fig.add_subplot(111, projection="3d", elev=30, azim=40)
-    zz = potential_fn(jnp.array(adata.obsm[config.dataset.obsm]))
-    xx = adata.obsm[config.dataset.obsm][:, 0]
-    yy = adata.obsm[config.dataset.obsm][:, 1]
+    zz = potential_fn(jnp.array(adata.obsm[cfg.dataset.obsm]))
+    xx = adata.obsm[cfg.dataset.obsm][:, 0]
+    yy = adata.obsm[cfg.dataset.obsm][:, 1]
     ax.scatter(
         xs=xx,
         ys=yy,
         zs=zz,
-        s=config.plot.scatter.size,
-        c=adata.obs[config.dataset.time_obs],
-        cmap=config.plot.scatter.cmap,
+        s=cfg.plot.scatter.size,
+        c=adata.obs[cfg.dataset.time_obs],
+        cmap=cfg.plot.scatter.cmap,
         zorder=1,
-        alpha=config.plot.scatter.alpha,
+        alpha=cfg.plot.scatter.alpha,
     )
 
     # Plot the potential function as a surface.
@@ -89,13 +135,13 @@ def main(config: DictConfig) -> None:
     xx, yy = jnp.meshgrid(xx, xx, indexing="xy")
     zz = potential_fn(jnp.stack([xx, yy], axis=-1))
     ax.plot_surface(xx, yy, zz, alpha=0.5, zorder=-1)
-    ax.contour(xx, yy, zz, zdir="z", offset=zz.min(), **config.plot.contour)
+    ax.contour(xx, yy, zz, zdir="z", offset=zz.min(), **cfg.plot.contour)
 
     # Decorate the plot.
-    ax.set_xlabel(f"{config.dataset.obsm} 1")
-    ax.set_ylabel(f"{config.dataset.obsm} 2")
+    ax.set_xlabel(f"{cfg.dataset.obsm} 1")
+    ax.set_ylabel(f"{cfg.dataset.obsm} 2")
     ax.set_zlabel("Potential")
-    plt.title(config.plot.title)
+    plt.title(cfg.plot.title)
     plt.show()
 
 

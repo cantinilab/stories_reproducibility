@@ -1,22 +1,30 @@
 import hydra
-import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import optax
-import space_time
 import wandb
-from jax import vmap
-from omegaconf import DictConfig
-from space_time import explicit_steps, implicit_steps
+from flatten_dict import flatten
+from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 
 @hydra.main(version_base=None, config_path="configs/test_step", config_name="config")
 def main(cfg: DictConfig) -> None:
 
+    import jax
+    import jax.numpy as jnp
+    import optax
+    import space_time
+    from jax import vmap
+    from space_time import explicit_steps, implicit_steps
+
     # start a new wandb run to track this script
     print(dict(cfg))
-    wandb.init(project="spacetime-step", config=dict(cfg))
+    print(f"JAX device type: {jax.devices()[0].device_kind}")
+
+    wandb.init(
+        project="spacetime-step",
+        config=flatten(OmegaConf.to_container(cfg), reducer="dot"),
+        mode=cfg.wandb.mode,
+    )
 
     # Define the Styblinski potential.
     print("Defining potential")
@@ -120,6 +128,9 @@ def main(cfg: DictConfig) -> None:
         potential=potential_network,
         proximal_step=proximal_step,
         tau=cfg.model.tau,
+        quadratic=cfg.model.quadratic,
+        teacher_forcing=cfg.model.teacher_forcing,
+        wb=True,
     )
 
     # Fit the model.
@@ -127,12 +138,16 @@ def main(cfg: DictConfig) -> None:
     input_distributions = [
         {"x": x, "space": space} for x, space in zip(x_list, space_list)
     ]
+    optimizer = optax.chain(
+        optax.clip(1.0),
+        optax.adam(learning_rate=cfg.model.learning_rate),
+    )
     my_model.fit(
         input_distributions=input_distributions,
         n_iter=cfg.model.n_iter,
         batch_iter=cfg.model.batch_iter,
         batch_size=cfg.model.batch_size,
-        optimizer=optax.adam(cfg.model.learning_rate),
+        optimizer=optimizer,
     )
 
     # Use the trained model to create a potential function.
@@ -140,18 +155,12 @@ def main(cfg: DictConfig) -> None:
     trained_potential_fn = lambda x: my_model.potential.apply(my_model.params, x)
     zz_pred = vmap(trained_potential_fn)(jnp.stack((xx.ravel(), yy.ravel()), axis=1))
 
-    # Initialize the figure.
-    fig = plt.figure(constrained_layout=True, figsize=(20, 6))
-    ax_omics = fig.add_subplot(1, 3, 1)
-    ax_space = fig.add_subplot(1, 3, 2)
-    ax_omics_trained = fig.add_subplot(1, 3, 3)
-
     # Plot the gradient flow on the ground truth potential.
     print("Plotting gradient flow on the ground truth potential")
     cmap = plt.get_cmap("coolwarm")
-    ax_omics.contourf(xx, yy, zz.reshape(xx.shape), levels=20, alpha=0.8)
+    plt.contourf(xx, yy, zz.reshape(xx.shape), levels=20, alpha=0.8)
     for i in range(len(x_list)):
-        ax_omics.scatter(
+        plt.scatter(
             x_list[i][:, 0],
             x_list[i][:, 1],
             color=cmap(i / len(x_list)),
@@ -159,7 +168,10 @@ def main(cfg: DictConfig) -> None:
             s=1e3 * marginals,
             alpha=0.8,
         )
-    ax_omics.set_title("Cells on the Styblinski omics potential")
+    plt.title("Cells on the Styblinski omics potential")
+    image = wandb.Image(plt)
+    wandb.log({"omics_evolution": image})
+    plt.clf()
 
     # Compute the colors for the cells in physical space.
     r = x_list[-1][:, 0]
@@ -174,7 +186,7 @@ def main(cfg: DictConfig) -> None:
     # Plot the cells in physical space.
     print("Plotting cells in physical space")
     for i in range(len(space_list)):
-        ax_space.scatter(
+        plt.scatter(
             space_list[i][:, 0],
             space_list[i][:, 1],
             c=colors,
@@ -182,14 +194,20 @@ def main(cfg: DictConfig) -> None:
             s=2e3 * marginals,
             alpha=i * 0.8 / len(space_list),
         )
-    ax_space.set_title("Cells in physical space, colored by omics at last timepoint")
+    plt.title("Cells in physical space, colored by omics at last timepoint")
+    image = wandb.Image(plt)
+    wandb.log({"space_evolution": image})
+    plt.clf()
 
     # Plot the trained potential.
     print("Plotting trained potential")
-    ax_omics_trained.contourf(xx, yy, zz_pred.reshape(xx.shape), levels=20, alpha=0.8)
-    ax_omics_trained.set_title("Trained potential")
+    plt.contourf(xx, yy, zz_pred.reshape(xx.shape), levels=20, alpha=0.8)
+    plt.title("Trained potential")
+    image = wandb.Image(plt)
+    wandb.log({"learned_potential": image})
+    plt.clf()
 
-    plt.show()
+    plt.close()
 
 
 if __name__ == "__main__":
