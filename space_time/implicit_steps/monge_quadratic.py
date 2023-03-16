@@ -1,6 +1,7 @@
 from typing import Callable, Tuple
 
 import flax.linen as nn
+import jax
 import jax.numpy as jnp
 import jaxopt
 import optax
@@ -169,13 +170,19 @@ class MongeQuadraticImplicitStep(implicit_steps.ImplicitStep):
             implicit_diff=self.implicit_diff,
         )
 
+        @jax.jit
+        def jitted_update(v, state):
+            return opt.update(v, state, inner_x=x, inner_phi=Phi, inner_a=a)
+
         # Run the gradient descent, logging the proximal cost if we're using wandb.
         init_v = jnp.zeros((x.shape[0], x.shape[1] + space.shape[1]))
         v, state = init_v, opt.init_state(init_v, inner_x=x, inner_phi=Phi, inner_a=a)
         for _ in range(self.maxiter):
-            v, state = opt.update(v, state, inner_x=x, inner_phi=Phi, inner_a=a)
+            v, state = jitted_update(v, state)
             if self.wb:
                 wandb.log({"proximal_cost": state.error})
+            if state.error < 1e-6:
+                break
 
         # Compute the new omics and spatial coordinates.
         return x + tau * v[:, : x.shape[1]], space + tau * v[:, x.shape[1] :]

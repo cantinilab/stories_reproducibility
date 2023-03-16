@@ -1,6 +1,7 @@
 from typing import Callable, Tuple
 
 import flax.linen as nn
+import jax
 import jax.numpy as jnp
 import jaxopt
 import optax
@@ -103,11 +104,18 @@ class QuadraticImplicitStep(implicit_steps.ImplicitStep):
         # Run the gradient descent.
         init_x = jnp.concatenate((x, space), axis=1)
         state = opt.init_state(init_x, inner_x=init_x, inner_a=a)
+
+        @jax.jit
+        def jitted_update(y, state):
+            return opt.update(y, state, inner_x=init_x, inner_a=a)
+
         y = init_x
         for _ in range(self.maxiter):
-            y, state = opt.update(y, state, inner_x=init_x, inner_a=a)
+            y, state = jitted_update(y, state)
             if self.wb:
                 wandb.log({"proximal_cost": state.error})
+            if state.error < 1e-6:
+                break
 
         # Return the new omics and the new space.
         return y[:, : x.shape[1]], y[:, x.shape[1] :]

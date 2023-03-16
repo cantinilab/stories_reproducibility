@@ -1,6 +1,7 @@
 from typing import Callable, Tuple
 
 import flax.linen as nn
+import jax
 import jax.numpy as jnp
 import jaxopt
 import optax
@@ -19,7 +20,7 @@ class MongeLinearImplicitStep(implicit_steps.ImplicitStep):
         transportation plan is the identity (each cell mapped to itself).
 
         Args:
-            maxiter (int, optional): The mamximum number of iterations for the optimization loop. Defaults to 100.
+            maxiter (int, optional): The maximum number of iterations for the optimization loop. Defaults to 100.
             implicit_diff (bool, optional): Whether to differentiate implicitly through the optimization loop. Defaults to True.
             wb (bool, optional): Whether to log the proximal loss using wandb. Defaults to False.
         """
@@ -71,14 +72,19 @@ class MongeLinearImplicitStep(implicit_steps.ImplicitStep):
             implicit_diff=self.implicit_diff,
         )
 
+        @jax.jit
+        def jitted_update(v, state):
+            return opt.update(v, state, inner_x=x, inner_a=a)
+
         # Run the gradient descent, and log the proximal cost.
-        v, state = jnp.zeros(x.shape), opt.init_state(
-            jnp.zeros(x.shape), inner_x=x, inner_a=a
-        )
+        v = jnp.zeros(x.shape)
+        state = opt.init_state(v, inner_x=x, inner_a=a)
         for _ in range(self.maxiter):
-            v, state = opt.update(v, state, inner_x=x, inner_a=a)
+            v, state = jitted_update(v, state)
             if self.wb:
                 wandb.log({"proximal_cost": state.error})
+            if state.error < 1e-6:
+                break
 
         # Return the new omics coordinates and spatial coordinates. The spatial
         # coordinates are not updated.
