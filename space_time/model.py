@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import wandb
 from jax.random import PRNGKey
 from optax import GradientTransformation
 from space_time.explicit_steps import ExplicitStep
@@ -15,7 +16,9 @@ from tqdm import tqdm
 
 from ott.geometry.pointcloud import PointCloud
 from ott.problems.linear import linear_problem
+from ott.problems.quadratic import quadratic_problem
 from ott.solvers.linear import sinkhorn
+from ott.solvers.quadratic import gromov_wasserstein
 
 
 class SpaceTime:
@@ -24,9 +27,10 @@ class SpaceTime:
         potential: nn.Module = MLPPotential(),
         proximal_step: Callable = Union[ExplicitStep, ImplicitStep],
         tau: float = 1e-2,
-        debias: bool = True,
+        quadratic: bool = False,
         epsilon: float = 0.05,
         teacher_forcing: bool = True,
+        wb: bool = False,
     ):
         """Multi-modal Fused Gromov-Wasserstein gradient flow model for spatio-temporal omics data.
 
@@ -39,9 +43,10 @@ class SpaceTime:
         """
         self.potential = potential
         self.tau = tau
-        self.debias = debias
+        self.quadratic = quadratic
         self.epsilon = epsilon
         self.teacher_forcing = teacher_forcing
+        self.wb = wb
         self.proximal_step = proximal_step
 
     def fit(
@@ -73,8 +78,11 @@ class SpaceTime:
             # TODO: Make teacher forcing optional.
             # TODO: move epsilon and debias here.
 
-            # We initialize the Sinkhorn solver outside of the loop.
-            sinkhorn_solver = sinkhorn.Sinkhorn()
+            # We initialize the OTT solver outside of the loop.
+            if self.quadratic:
+                ott_solver = gromov_wasserstein.GromovWasserstein()
+            else:
+                ott_solver = sinkhorn.Sinkhorn()
 
             def _through_time(carry, t):
                 """Helper function to compute the loss at a given timepoint."""
@@ -91,25 +99,50 @@ class SpaceTime:
                     tau=self.tau,  # Time step
                 )
 
-                # Compute the loss between the predicted and the true next time step.
-                geom_xy = PointCloud(pred_x, _batch_x[t + 1], epsilon=self.epsilon)
-                problem = linear_problem.LinearProblem(
-                    geom_xy,
-                    a=_batch_marginals[t],
-                    b=_batch_marginals[t + 1],
-                )
-                sink_loss = sinkhorn_solver(problem).reg_ot_cost
+                if self.quadratic:
+                    # Compute the loss between the predicted and the true next time step.
+                    geom_xy = PointCloud(pred_x, _batch_x[t + 1], epsilon=self.epsilon)
+                    geom_xx = PointCloud(pred_space, pred_space, epsilon=self.epsilon)
+                    geom_yy = PointCloud(
+                        _batch_space[t + 1], _batch_space[t + 1], epsilon=self.epsilon
+                    )
+                    problem = quadratic_problem.QuadraticProblem(
+                        geom_xx,
+                        geom_yy,
+                        geom_xy,
+                        a=_batch_marginals[t],
+                        b=_batch_marginals[t + 1],
+                    )
+                    ot_loss = ott_solver(problem).reg_gw_cost
 
-                # If debiasing is enabled, compute the terms of the Sinkhorn divergence.
-                # We only need the term xx, because the term yy is a constant.
-                if self.debias:
+                    # We only need the term xx, because the term yy is a constant.
+                    geom_xy = PointCloud(pred_x, pred_x, epsilon=self.epsilon)
+                    problem = quadratic_problem.QuadraticProblem(
+                        geom_xx,
+                        geom_xx,
+                        geom_xy,
+                        a=_batch_marginals[t],
+                        b=_batch_marginals[t],
+                    )
+                    ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
+                else:
+                    # Compute the loss between the predicted and the true next time step.
+                    geom_xy = PointCloud(pred_x, _batch_x[t + 1], epsilon=self.epsilon)
+                    problem = linear_problem.LinearProblem(
+                        geom_xy,
+                        a=_batch_marginals[t],
+                        b=_batch_marginals[t + 1],
+                    )
+                    ot_loss = ott_solver(problem).reg_ot_cost
+
+                    # We only need the term xx, because the term yy is a constant.
                     geom_xx = PointCloud(pred_x, pred_x, epsilon=self.epsilon)
                     problem = linear_problem.LinearProblem(
                         geom_xx,
                         a=_batch_marginals[t],
                         b=_batch_marginals[t],
                     )
-                    sink_loss -= 0.5 * sinkhorn_solver(problem).reg_ot_cost
+                    ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
                 # if no teacher-forcing, replace next overvation with predicted
                 _batch_x = jax.lax.cond(
@@ -133,17 +166,17 @@ class SpaceTime:
 
                 # Return the data for the next iteration and the current loss.
                 # To remove teacher-forcing, this will have to be changed.
-                return (_batch_x, _batch_space, _batch_marginals), sink_loss
+                return (_batch_x, _batch_space, _batch_marginals), ot_loss
 
-            # Iterate through timepoints efficiently. sink_loss becomes a 1-D array.
-            _, sink_loss = jax.lax.scan(
+            # Iterate through timepoints efficiently. ot_loss becomes a 1-D array.
+            _, ot_loss = jax.lax.scan(
                 _through_time,
                 (batch_x, batch_space, batch_marginals),
                 jnp.arange(len(batch_x) - 1),  # All timepoints except the last one
             )
 
             # Sum the losses over all timepoints.
-            return jnp.sum(sink_loss)
+            return jnp.sum(ot_loss)
 
         @jax.jit
         def step(
@@ -264,6 +297,9 @@ class SpaceTime:
                     batch_space=batch_space,
                     batch_marginals=batch_marginals,
                 )
+
+                if self.wb:
+                    wandb.log({"batch_iter": batch_it, "loss": loss_value})
 
                 pbar.set_postfix({"loss": loss_value})
 
