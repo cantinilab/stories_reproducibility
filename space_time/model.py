@@ -154,7 +154,7 @@ class SpaceTime:
                 _batch_space = jax.lax.cond(
                     self.teacher_forcing,
                     lambda u: u,
-                    lambda u: u.at[t + 1].set(pred_x),
+                    lambda u: u.at[t + 1].set(pred_space),
                     _batch_space,
                 )
                 _batch_marginals = jax.lax.cond(
@@ -245,23 +245,12 @@ class SpaceTime:
                 padded_space_distributions.append(space)
                 padded_marginals.append(jnp.ones(x.shape[0]) / x.shape[0])
 
-        # Initialize the parameters of the potential function.
-        init_key, batch_key = jax.random.split(key)
-        self.params = self.potential.init(init_key, padded_x_distributions[0])
-
-        # Initialize the optimizer.
-        opt_state = optimizer.init(self.params)
-
-        # Iterate through the training loop.
-        pbar = tqdm(range(n_iter))
-        for outer_it in pbar:
-
-            # Sample a batch of cells from each timepoint.
+        @jax.jit
+        def get_batch(key: jnp.ndarray):
             idx_list = []
             for timepoint in padded_x_distributions:
-                timepoint_key, batch_key = jax.random.split(batch_key)
                 idx_timepoint = jax.random.choice(
-                    timepoint_key,
+                    key,
                     len(timepoint),
                     shape=(batch_size,),
                     replace=False,
@@ -286,6 +275,22 @@ class SpaceTime:
                     for timepoint, idx in zip(padded_marginals, idx_list)
                 ]
             )
+            return batch_x, batch_space, batch_marginals
+
+        # Initialize the parameters of the potential function.
+        init_key, batch_key = jax.random.split(key)
+        self.params = self.potential.init(init_key, padded_x_distributions[0])
+
+        # Initialize the optimizer.
+        opt_state = optimizer.init(self.params)
+
+        # Iterate through the training loop.
+        pbar = tqdm(range(n_iter))
+        for outer_it in pbar:
+
+            # Sample a batch of cells from each timepoint.
+            timepoint_key, batch_key = jax.random.split(batch_key)
+            batch_x, batch_space, batch_marginals = get_batch(timepoint_key)
 
             for batch_it in range(batch_iter):
 
@@ -299,7 +304,12 @@ class SpaceTime:
                 )
 
                 if self.wb:
-                    wandb.log({"batch_iter": batch_it, "loss": loss_value})
+                    wandb.log(
+                        {
+                            "batch_iter": outer_it * batch_iter + batch_it,
+                            "loss": loss_value,
+                        }
+                    )
 
                 pbar.set_postfix({"loss": loss_value})
 
@@ -363,7 +373,7 @@ class SpaceTime:
 
         return self.transform_adata(adata)
 
-    def transform(self, x: jnp.ndarray, space: jnp.ndarray, **kwargs) -> jnp.ndarray:
+    def transform(self, x: jnp.ndarray, space: jnp.ndarray) -> jnp.ndarray:
         """Transform a distribution using the learned potential.
 
         Args:
@@ -372,12 +382,13 @@ class SpaceTime:
         Returns:
             jnp.ndarray: The transformed batch. Size (cells, dims).
         """
+        a = jnp.ones(x.shape[0]) / x.shape[0]
         return self.proximal_step.inference_step(
             x,
             space,
+            a,
             lambda x: self.potential.apply(self.params, x),  # Potential function
-            self.tau,  # Time step
-            **kwargs,
+            tau=self.tau,  # Time step
         )
 
     def fit_transform(
