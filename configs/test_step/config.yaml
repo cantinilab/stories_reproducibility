@@ -21,7 +21,7 @@ model:
   batch_size:
   learning_rate: 0.01
   quadratic: false
-  teacher_forcing: false
+  teacher_forcing: true
 
 wandb:
   mode: "online"

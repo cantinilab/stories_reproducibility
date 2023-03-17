@@ -1,8 +1,7 @@
 model:
-  debias: True
   epsilon: 0.01
-  teacher_forcing: True
-  proximal_step: "quadratic_explicit"
+  teacher_forcing: true
+  quadratic: false
   seed: 0
 
 potential:
@@ -10,17 +9,20 @@ potential:
 
 optimizer:
   learning_rate: 0.01
-  n_iter: 50
-  batch_iter: 50
-  batch_size: 20
+  n_iter: 1
+  batch_iter: 1_000
+  batch_size:
 
 plot:
-  title: "Energy landscape of Axolotl brain regeneration"
+  title: "Energy landscape"
   contour:
     levels: 30
     alpha: 0.5
     linewidths: 0.5
   scatter:
-    size: 1
+    size: 10
     alpha: 1
     cmap: "viridis"
+
+wandb:
+  mode: "online"

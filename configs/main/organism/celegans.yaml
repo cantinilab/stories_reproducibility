@@ -1,4 +1,6 @@
-path: "/users/csb/huizing/Documents/PhD/Data/c_elegans_embryos/c_elegans_embryos.h5ad"
-obsm: "X_phate"
+dataset_path: "/users/csb/huizing/Documents/PhD/Data/c_elegans_embryos/c_elegans_embryos.h5ad"
+obsm: "X_pca"
+viz_obsm: "X_phate"
 space_obsm: "X_space"
 time_obs: "time"
+subset: 1.0

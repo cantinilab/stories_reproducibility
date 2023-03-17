@@ -1,4 +1,6 @@
-path: "/users/csb/huizing/Documents/PhD/Data/axolotl/Regeneration_processed.h5ad"
-obsm: "X_umap"
+dataset_path: "/users/csb/huizing/Documents/PhD/Data/axolotl/Regeneration_processed.h5ad"
+obsm: "X_pca"
+viz_obsm: "X_umap"
 space_obsm: "X_spatial"
 time_obs: "time"
+subset: .1

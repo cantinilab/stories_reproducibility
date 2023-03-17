@@ -1,4 +1,6 @@
-path: "/users/csb/huizing/Documents/PhD/Data/zesta/spatial_sixtime_slice_stereoseq_processed.h5ad"
+dataset_path: "/users/csb/huizing/Documents/PhD/Data/zesta/spatial_sixtime_slice_stereoseq_processed.h5ad"
 space_obsm: "X_space"
-obsm: "X_phate"
+obsm: "X_pca"
+viz_obsm: "X_phate"
 time_obs: "time"
+subset: .5
