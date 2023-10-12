@@ -1,7 +1,0 @@
-type: "monge_quadratic_implicit"
-implicit_diff: true
-maxiter: 200
-tau: 0.01
-fused: 1.0
-cross: 1.0
-straight: 1.0

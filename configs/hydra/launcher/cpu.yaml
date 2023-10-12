@@ -1,0 +1,7 @@
+defaults:
+  - submitit_slurm
+
+tasks_per_node: 1
+mem_gb: 32
+partition: "ml4ig"
+timeout_min: 120

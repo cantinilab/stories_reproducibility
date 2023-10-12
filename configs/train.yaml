@@ -1,0 +1,45 @@
+skip_last: true # Skip the last timepoint for testing purposes
+checkpoint_path: "tmp" # Path to save the checkpoints
+
+# Configuration for the model
+model:
+  epsilon: 1.0 # The entropic regularization for the outer loss
+  tau: 1.0 # The step size, can be set to 1.0 since we learn the potential
+  teacher_forcing: true # Whether to use teacher forcing
+  quadratic: false # If true, use FGW instead of Sinkhorn
+  fused: 1.0 # Fused penalty, used if quadratic=true
+  seed: ??? # The random seed
+
+# Configuration for the neural potential function
+potential:
+  features: [64, 64]
+
+# Configuration for the proximal step. Type may be:
+# "linear_explicit", "monge_linear_implicit",
+# "quadratic_explicit", "monge_quadratic_implicit"
+step:
+  type: "linear_explicit" # The type of proximal step
+  fused: 1.0 # Fused penalty, used if type="quadratic_*"
+  cross: 1.0 # Cross penalty, used if type="quadratic_*"
+  straight: 1.0 # Straight penalty, used if type="quadratic_*"
+  implicit_diff: true # Used if type="*_implicit"
+
+# Configuration for the optimizer
+optimizer:
+  train_val_split: 0.8 # Proportion of train in the train/val split
+  learning_rate: 0.001 # Learning rate of the optimizer
+  checkpoint_interval: 1 # Try to save weights every x epochs.
+  max_epochs: 500 # Maximum number of epochs
+  batch_size: 256 # The batch size
+  min_delta: 0.001
+  patience: 20
+
+# Configuration for Weights & Biases
+wandb:
+  mode: "online"
+
+# To run on GPU use this command:
+# hydra/launcher=gpu or hydra/launcher=gpudev
+
+# To force CPU on GPU partition use this command:
+# hydra.job.env_set.JAX_PLATFORM_NAME=cpu

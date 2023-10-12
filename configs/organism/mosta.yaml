@@ -1,0 +1,6 @@
+dataset_path: "/pasteur/appa/scratch/ghuizing/Mouse_embryo_all_stage_processed.h5ad"
+space_obsm: "spatial"
+obsm: "X_pca_harmony"
+viz_obsm: "X_umap"
+annotation_obs: "annotation"
+time_obs: "time"

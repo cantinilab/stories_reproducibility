@@ -1,0 +1,16 @@
+# Configuration for Weights & Biases
+wandb:
+  mode: "online"
+
+checkpoint_path: ???
+
+hydra:
+  sweeper:
+    params:
+      checkpoint_path: tmp/linear_midbrain_29867,tmp/linear_zesta_30691,tmp/linear_zesta_32268,tmp/quad_zesta_10243,tmp/quad_zesta_1860,tmp/quad_zesta_552,tmp/linear_zesta_17116,tmp/linear_zesta_31603,tmp/linear_zesta_8488,tmp/quad_zesta_18552,tmp/quad_zesta_27394
+
+# To run on GPU use this command:
+# hydra/launcher=gpu or hydra/launcher=gpudev
+
+# To force CPU on GPU partition use this command:
+# hydra.job.env_set.JAX_PLATFORM_NAME=cpu
