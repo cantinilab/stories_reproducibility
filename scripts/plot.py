@@ -32,13 +32,13 @@ def main(cfg: DictConfig) -> None:
                 "checkpoint_path": eval_cfg.checkpoint_path,
             }
         )
-        FGW_scores.append(
-            {
-                "FGW": scores["FGW"],
-                "seed": eval_cfg.model.seed,
-                "checkpoint_path": eval_cfg.checkpoint_path,
-            }
-        )
+        # FGW_scores.append(
+        #     {
+        #         "FGW": scores["FGW"],
+        #         "seed": eval_cfg.model.seed,
+        #         "checkpoint_path": eval_cfg.checkpoint_path,
+        #     }
+        # )
         L1_scores.append(
             {
                 "L1": scores["L1"],
@@ -58,18 +58,22 @@ def main(cfg: DictConfig) -> None:
     df = pd.DataFrame(sinkhorn_scores)
     df["sinkhorn"] = df["sinkhorn"].astype("float")
     sns.barplot(data=df, x="checkpoint_path", y="sinkhorn")
+    plt.xticks(rotation=45)
     plt.savefig("plots/sinkhorn_scores.png")
     plt.close()
 
-    df = pd.DataFrame(FGW_scores)
-    df["FGW"] = df["FGW"].astype("float")
-    sns.barplot(data=df, x="checkpoint_path", y="FGW")
-    plt.savefig("plots/FGW_scores.png")
-    plt.close()
+    # df = pd.DataFrame(FGW_scores)
+    # df["FGW"] = df["FGW"].astype("float")
+    # sns.barplot(data=df, x="checkpoint_path", y="FGW")
+    # plt.xticks(rotation=45)
+    # plt.savefig("plots/FGW_scores.png")
+    # plt.close()
 
     df = pd.DataFrame(L1_scores)
     df["L1"] = df["L1"].astype("float")
     sns.barplot(data=df, x="checkpoint_path", y="L1")
+    # Rotate the x-axis labels.
+    plt.xticks(rotation=45)
     plt.savefig("plots/L1_scores.png")
     plt.close()
 

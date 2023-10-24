@@ -56,6 +56,8 @@ def main(cfg: DictConfig) -> None:
         adata.obs["time"] = (
             adata.obs["time"].str.replace("hpf", "").astype(float).astype(int)
         )
+        # Remove the timepoint 10.
+        adata = adata[adata.obs["time"] != 10]
     if cfg.time_recipe == "axolotl":
         idx = adata.obs["Batch"] != "Injury_control_FP200000239BL_E3"
         adata = adata[idx]

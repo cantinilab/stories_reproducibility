@@ -2,11 +2,4 @@
 wandb:
   mode: "online"
 
-checkpoint_paths: [tmp/linear_zesta_30691,tmp/linear_zesta_32268,tmp/quad_zesta_10243,tmp/quad_zesta_1860,tmp/quad_zesta_552,tmp/linear_zesta_17116,tmp/linear_zesta_31603,tmp/linear_zesta_8488,tmp/quad_zesta_18552,tmp/quad_zesta_27394]
-
-
-# To run on GPU use this command:
-# hydra/launcher=gpu or hydra/launcher=gpudev
-
-# To force CPU on GPU partition use this command:
-# hydra.job.env_set.JAX_PLATFORM_NAME=cpu
+checkpoint_paths: [tmp/linear_mosta_11135,tmp/linear_mosta_21470,tmp/linear_mosta_27630,tmp/linear_mosta_32046,tmp/linear_mosta_5611,tmp/quad_mosta_01_16935,tmp/quad_mosta_01_24721,tmp/quad_mosta_01_24727,tmp/quad_mosta_01_30074,tmp/quad_mosta_01_31373,tmp/quad_mosta_05_11315,tmp/quad_mosta_05_24242,tmp/quad_mosta_05_27919,tmp/quad_mosta_05_4185,tmp/quad_mosta_05_9681,tmp/quad_mosta_1_17390,tmp/quad_mosta_1_20010,tmp/quad_mosta_1_26208,tmp/quad_mosta_1_31874,tmp/quad_mosta_1_3206]

@@ -1,4 +1,4 @@
-from typing import Callable, Tuple
+from typing import Callable
 
 import flax.linen as nn
 import jax
@@ -46,24 +46,20 @@ class MongeLinearImplicitStep(ProximalStep):
     def inference_step(
         self,
         x: jnp.ndarray,
-        space: jnp.ndarray,
         potential_fun: Callable,
         tau: float,
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> jnp.ndarray:
         """Performs a linear implicit step on the input distribution and returns the
-        updated distribution, given a potential function. The spatial coordinates
-        remain unchanged in a linear proximal step. If logging is available, logs the
-        proximal cost.
+        updated distribution, given a potential function. If logging is available,
+        logs the proximal cost.
 
         Args:
             x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            space (jnp.ndarray): The space variable of size (batch_size, 2)
             potential_fun (Callable): A potential function.
             tau (float): The time step, which should be greater than 0.
 
         Returns:
-            Tuple[jnp.ndarray]: The updated distribution of size (batch_size, n_dims) and
-            its spatial coordinates of size (batch_size, 2).
+            jnp.ndarray: The updated distribution of size (batch_size, n_dims).
         """
 
         # Define a helper function to compute the proximal cost.
@@ -88,35 +84,30 @@ class MongeLinearImplicitStep(ProximalStep):
             if state.error < self.tol:
                 break
 
-        # Return the new omics coordinates and spatial coordinates. The spatial
-        # coordinates are not updated.
-        return y, space
+        # Return the new omics coordinates.
+        return y
 
     def training_step(
         self,
         x: jnp.ndarray,
-        space: jnp.ndarray,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> jnp.ndarray:
         """Performs a linear implicit step on the input distribution and returns the
         updated distribution. This function differs from the inference step in that it
-        takes a potential network as input and returns the updated distribution. The
-        spatial coordinates remain unchanged in a linear proximal step. Logging is
-        not available in this function because it rpevents implicit differentiation.
+        takes a potential network as input and returns the updated distribution. Logging
+        is not available in this function because it rpevents implicit differentiation.
 
         Args:
             x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            space (jnp.ndarray): The space variable of size (batch_size, 2)
             potential_network (nn.Module): A potential function parameterized by a
             neural network.
             potential_params (optax.Params): The parameters of the potential network.
             tau (float): The time step, which should be greater than 0.
 
         Returns:
-            Tuple[jnp.ndarray]: The updated distribution of size (batch_size, n_dims) and
-            its spatial coordinates of size (batch_size, 2).
+            jnp.ndarray: The updated distribution of size (batch_size, n_dims).
         """
 
         # Define a helper function to compute the proximal cost.
@@ -130,6 +121,5 @@ class MongeLinearImplicitStep(ProximalStep):
         # Run the optimization loop.
         y, _ = opt.run(x, inner_x=x, inner_potential_params=potential_params)
 
-        # Return the new omics coordinates and spatial coordinates. The spatial
-        # coordinates are not updated.
-        return y, space
+        # Return the new omics coordinates.
+        return y

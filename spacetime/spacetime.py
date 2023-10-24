@@ -127,8 +127,8 @@ class SpaceTime:
                 _x, _space = carry
 
                 # Predict the timepoint t+1 using the proximal step.
-                pred_x, pred_space = self.proximal_step.training_step(
-                    _x[t], _space[t], self.potential, params, self.tau
+                pred_x = self.proximal_step.training_step(
+                    _x[t], self.potential, params, self.tau
                 )
 
                 if not self.quadratic:
@@ -151,12 +151,11 @@ class SpaceTime:
                 else:
                     # In case we want a Fused Gromov-Wasserstein loss, we should define
                     # geometries on space for xx, yy, and on genes for xy.
-                    # TODO: we can consider using space[t] instead of pred_space.
                     pointcloud_kwds = {
                         "epsilon": self.epsilon,
                         "scale_cost": "max_cost",
                     }
-                    geom_xx = PointCloud(pred_space, pred_space, **pointcloud_kwds)
+                    geom_xx = PointCloud(_space[t], _space[t], **pointcloud_kwds)
                     geom_yy = PointCloud(
                         _space[t + 1], _space[t + 1], **pointcloud_kwds
                     )
@@ -199,7 +198,7 @@ class SpaceTime:
                 _space = jax.lax.cond(
                     self.teacher_forcing,
                     lambda u: u,
-                    lambda u: u.at[t + 1].set(pred_space),
+                    lambda u: u.at[t + 1].set(_space[t]),
                     _space,
                 )
 
@@ -270,9 +269,11 @@ class SpaceTime:
                     # The save the loss.
                     train_losses.append(train_loss)
                 else:
+                    print("test")
                     # If it is a val batch, just save the loss.
                     val_losses.append(loss_fn(self.params, dataloader.next_val()))
 
+            print("val losses", np.mean(val_losses))
             # Compute epoch statistics.
             epoch_stats = {
                 "epoch": epoch,
@@ -286,7 +287,18 @@ class SpaceTime:
 
             # Log.
             if self.log_callback:
+                # Log the epoch statistics.
                 self.log_callback(epoch_stats)
+
+                # Log the training losses for each minibatch.
+                n_iters = len(train_losses) * (epoch - 1)
+                for i, loss in enumerate(train_losses):
+                    self.log_callback({"iter": n_iters + i, "iter_train_loss": loss})
+
+                # Log the validation losses for each minibatch.
+                n_iters = len(val_losses) * (epoch - 1)
+                for i, loss in enumerate(val_losses):
+                    self.log_callback({"iter": n_iters + i, "iter_val_loss": loss})
 
             # Save the parameters.
             update_metric = "train_loss" if iter_per_epoch_val == 0 else "val_loss"
@@ -310,7 +322,6 @@ class SpaceTime:
         adata: ad.AnnData,
         time_obs: str,
         x_obsm: str,
-        space_obsm: str,
         batch_size: int = 128,
         key: PRNGKey = PRNGKey(0),
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -320,7 +331,6 @@ class SpaceTime:
             adata (ad.AnnData): The AnnData object to transform.
             time_obs (str): The name of the timepoint observation.
             x_obsm (str): The obsm field containing the data to transform.
-            space_obsm (str): The obsm field containing the space.
             batch_size (int, optional): The batch size. Defaults to 128.
 
         Returns:
@@ -334,11 +344,9 @@ class SpaceTime:
         # Get the x and spatial data for the last timepoint.
         idx = adata.obs[time_obs] == timepoints[-1]
         x = adata[idx].obsm[x_obsm].copy()
-        space = adata[idx].obsm[space_obsm].copy()
 
         # Initialize the predictions.
         x_pred = np.zeros(x.shape)
-        space_pred = np.zeros(space.shape)
 
         # Get a shuffled list of indices.
         idx = jnp.arange(x.shape[0])
@@ -348,16 +356,14 @@ class SpaceTime:
         # Iterate over the batches.
         for idx_batch in np.array_split(idx, x.shape[0] // batch_size):
             # Predict the batch's next state.
-            x_pred_batch, space_pred_batch = self.proximal_step.inference_step(
+            x_pred_batch = self.proximal_step.inference_step(
                 jnp.array(x[idx_batch]),
-                jnp.array(space[idx_batch]),
                 lambda u: self.potential.apply(self.params, u),
                 tau=self.tau,
             )
 
             # Put the batch's predictions in the obsm field.
             x_pred[idx_batch] = np.array(x_pred_batch)
-            space_pred[idx_batch] = np.array(space_pred_batch)
 
         # Return the predictions.
-        return x_pred, space_pred
+        return x_pred

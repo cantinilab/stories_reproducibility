@@ -187,7 +187,7 @@ def main(cfg: DictConfig) -> None:
     assert out.converged
 
     wandb.log({"sinkhorn": out.reg_ot_cost})
-    scores_dict["sinkhorn"] = out.reg_ot_cost
+    scores_dict["sinkhorn"] = float(out.reg_ot_cost)
 
     fig, axes = plt.subplots(1, 2, figsize=(4, 3), constrained_layout=True)
 
@@ -245,92 +245,6 @@ def main(cfg: DictConfig) -> None:
     wandb.log({"Sinkhorn plan": image})
     plt.close("all")
 
-    #################### Compute the Fused Gromov-Wasserstein distance ###################
-
-    geom_xx = PointCloud(
-        sub_adata_pred.obsm["space_pred"],
-        scale_cost="mean",
-        epsilon=eval_cfg.model.epsilon,
-        batch_size=512,
-    )
-    geom_yy = PointCloud(
-        adata.obsm[eval_cfg.organism.space_obsm][idx_true],
-        scale_cost="mean",
-        epsilon=eval_cfg.model.epsilon,
-        batch_size=512,
-    )
-    geom_xy = PointCloud(
-        sub_adata_pred.obsm["pred"],
-        adata.obsm[eval_cfg.organism.obsm][idx_true],
-        epsilon=eval_cfg.model.epsilon,
-        batch_size=512,
-    )
-    problem = QuadraticProblem(
-        geom_xx, geom_yy, geom_xy, fused_penalty=eval_cfg.model.fused
-    )
-    solver = GromovWasserstein(rank=500)
-    out = solver(problem)
-    assert out.converged
-
-    wandb.log({"FGW": out.reg_gw_cost})
-    scores_dict["FGW"] = out.reg_gw_cost
-
-    fig, axes = plt.subplots(1, 2, figsize=(4, 3), constrained_layout=True)
-
-    dot_size = 5e3 / sub_adata_pred.n_obs
-    sns.scatterplot(
-        x=sub_adata_pred.obsm["space_pred"][:, 0],
-        y=sub_adata_pred.obsm["space_pred"][:, 1],
-        c=pred_color,
-        ax=axes[0],
-        s=dot_size,
-    )
-    axes[0].set_title(f"Prediction from {timepoints[-2]}", fontsize=9)
-    axes[0].set_frame_on(False)
-
-    dot_size = 5e3 / adata[idx_true].n_obs
-    sns.scatterplot(
-        x=adata.obsm[eval_cfg.organism.space_obsm][idx_true, 0],
-        y=adata.obsm[eval_cfg.organism.space_obsm][idx_true, 1],
-        c=color[idx_true],
-        ax=axes[1],
-        s=dot_size,
-    )
-    axes[1].set_title(f"Real timepoint {timepoints[-1]}", fontsize=9)
-    axes[1].set_frame_on(False)
-
-    for j in np.random.choice(sub_adata_pred.n_obs, size=10, replace=False):
-        indicator = np.zeros(sub_adata_pred.n_obs)
-        indicator[j] = 1
-        push = out.apply(indicator)
-
-        max_Pj = np.max(push)
-        for k in np.argpartition(push, -5)[-5:]:
-            con = ConnectionPatch(
-                xyA=(
-                    sub_adata_pred.obsm["space_pred"][j, 0],
-                    sub_adata_pred.obsm["space_pred"][j, 1],
-                ),
-                coordsA=axes[0].transData,
-                xyB=(
-                    adata.obsm[eval_cfg.organism.space_obsm][
-                        np.where(idx_true)[0][k], 0
-                    ],
-                    adata.obsm[eval_cfg.organism.space_obsm][
-                        np.where(idx_true)[0][k], 1
-                    ],
-                ),
-                coordsB=axes[1].transData,
-                alpha=0.5 * min(float(push[k] / max_Pj), 1.0),
-            )
-
-            fig.add_artist(con)
-
-    # Log the plot.
-    image = wandb.Image(plt)
-    wandb.log({"Gromov plan": image})
-    plt.close("all")
-
     ########## Compute the difference between real and kNN predicted histograms. #########
 
     labels_real = adata[idx_true].obs[eval_cfg.organism.annotation_obs]
@@ -342,7 +256,7 @@ def main(cfg: DictConfig) -> None:
     )
 
     wandb.log({"L1": l1_dist})
-    scores_dict["L1"] = l1_dist
+    scores_dict["L1"] = float(l1_dist)
 
     histo_list = []
     for label in np.unique(labels_real):
@@ -362,6 +276,90 @@ def main(cfg: DictConfig) -> None:
     image = wandb.Image(plt)
     wandb.log({"Histograms": image})
     plt.close("all")
+
+    #################### Compute the Fused Gromov-Wasserstein distance ###################
+
+    # geom_xx = PointCloud(
+    #     sub_adata_pred.obsm["space_pred"],
+    #     scale_cost="mean",
+    #     epsilon=eval_cfg.model.epsilon,
+    #     batch_size=64,
+    # )
+    # geom_yy = PointCloud(
+    #     adata.obsm[eval_cfg.organism.space_obsm][idx_true],
+    #     scale_cost="mean",
+    #     epsilon=eval_cfg.model.epsilon,
+    #     batch_size=64,
+    # )
+    # geom_xy = PointCloud(
+    #     sub_adata_pred.obsm["pred"],
+    #     adata.obsm[eval_cfg.organism.obsm][idx_true],
+    #     epsilon=eval_cfg.model.epsilon,
+    #     batch_size=64,
+    # )
+    # problem = QuadraticProblem(geom_xx, geom_yy, geom_xy, fused_penalty=1.0)
+    # solver = GromovWasserstein(rank=20)
+    # out = solver(problem)
+    # assert out.converged
+
+    # wandb.log({"FGW": out.reg_gw_cost})
+    # scores_dict["FGW"] = float(out.reg_gw_cost)
+
+    # fig, axes = plt.subplots(1, 2, figsize=(4, 3), constrained_layout=True)
+
+    # dot_size = 5e3 / sub_adata_pred.n_obs
+    # sns.scatterplot(
+    #     x=sub_adata_pred.obsm["space_pred"][:, 0],
+    #     y=sub_adata_pred.obsm["space_pred"][:, 1],
+    #     c=pred_color,
+    #     ax=axes[0],
+    #     s=dot_size,
+    # )
+    # axes[0].set_title(f"Prediction from {timepoints[-2]}", fontsize=9)
+    # axes[0].set_frame_on(False)
+
+    # dot_size = 5e3 / adata[idx_true].n_obs
+    # sns.scatterplot(
+    #     x=adata.obsm[eval_cfg.organism.space_obsm][idx_true, 0],
+    #     y=adata.obsm[eval_cfg.organism.space_obsm][idx_true, 1],
+    #     c=color[idx_true],
+    #     ax=axes[1],
+    #     s=dot_size,
+    # )
+    # axes[1].set_title(f"Real timepoint {timepoints[-1]}", fontsize=9)
+    # axes[1].set_frame_on(False)
+
+    # for j in np.random.choice(sub_adata_pred.n_obs, size=10, replace=False):
+    #     indicator = np.zeros(sub_adata_pred.n_obs)
+    #     indicator[j] = 1
+    #     push = out.apply(indicator)
+
+    #     max_Pj = np.max(push)
+    #     for k in np.argpartition(push, -5)[-5:]:
+    #         con = ConnectionPatch(
+    #             xyA=(
+    #                 sub_adata_pred.obsm["space_pred"][j, 0],
+    #                 sub_adata_pred.obsm["space_pred"][j, 1],
+    #             ),
+    #             coordsA=axes[0].transData,
+    #             xyB=(
+    #                 adata.obsm[eval_cfg.organism.space_obsm][
+    #                     np.where(idx_true)[0][k], 0
+    #                 ],
+    #                 adata.obsm[eval_cfg.organism.space_obsm][
+    #                     np.where(idx_true)[0][k], 1
+    #                 ],
+    #             ),
+    #             coordsB=axes[1].transData,
+    #             alpha=0.5 * min(float(push[k] / max_Pj), 1.0),
+    #         )
+
+    #         fig.add_artist(con)
+
+    # # Log the plot.
+    # image = wandb.Image(plt)
+    # wandb.log({"Gromov plan": image})
+    # plt.close("all")
 
     wandb.finish()
 

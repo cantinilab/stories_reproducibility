@@ -3,7 +3,7 @@ checkpoint_path: "tmp" # Path to save the checkpoints
 
 # Configuration for the model
 model:
-  epsilon: 1.0 # The entropic regularization for the outer loss
+  epsilon: 0.01 # The entropic regularization for the outer loss
   tau: 1.0 # The step size, can be set to 1.0 since we learn the potential
   teacher_forcing: true # Whether to use teacher forcing
   quadratic: false # If true, use FGW instead of Sinkhorn
@@ -19,10 +19,8 @@ potential:
 # "quadratic_explicit", "monge_quadratic_implicit"
 step:
   type: "linear_explicit" # The type of proximal step
-  fused: 1.0 # Fused penalty, used if type="quadratic_*"
-  cross: 1.0 # Cross penalty, used if type="quadratic_*"
-  straight: 1.0 # Straight penalty, used if type="quadratic_*"
-  implicit_diff: true # Used if type="*_implicit"
+  implicit_diff: true # Used if type="monge_linear_implicit"
+  maxiter: 100 # Used if type="monge_linear_implicit"
 
 # Configuration for the optimizer
 optimizer:
@@ -37,9 +35,3 @@ optimizer:
 # Configuration for Weights & Biases
 wandb:
   mode: "online"
-
-# To run on GPU use this command:
-# hydra/launcher=gpu or hydra/launcher=gpudev
-
-# To force CPU on GPU partition use this command:
-# hydra.job.env_set.JAX_PLATFORM_NAME=cpu
