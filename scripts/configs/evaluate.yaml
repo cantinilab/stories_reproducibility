@@ -1,0 +1,5 @@
+# Configuration for Weights & Biases
+wandb:
+  mode: "offline"
+
+checkpoint_path: ???

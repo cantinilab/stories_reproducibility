@@ -1,0 +1,9 @@
+defaults:
+  - submitit_slurm
+
+tasks_per_node: 1
+mem_gb: 128
+gres: "gpu:1,gmem:80G"
+qos: "fast"
+partition: "gpu"
+timeout_min: 120

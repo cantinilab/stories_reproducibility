@@ -1,2 +1,3 @@
 from .linear_explicit import LinearExplicitStep
 from .monge_linear_implicit import MongeLinearImplicitStep
+from .icnn_linear_implicit import ICNNLinearImplicitStep

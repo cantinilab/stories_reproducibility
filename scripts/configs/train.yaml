@@ -1,0 +1,39 @@
+skip_last: true # Skip the last timepoint for testing purposes
+random_space: false # Make the space random for ablation study
+checkpoint_path: "tmp" # Path to save the checkpoints
+n_pcs: 20 # Number of principal components to use
+
+# Configuration for the model
+model:
+  epsilon: 0.01 # The entropic regularization for the outer loss
+  tau_auto: true # Whether to infer the step size from the time_obs
+  tau: 1.0 # The step size, can be set to 1.0 since we learn the potential
+  teacher_forcing: true # Whether to use teacher forcing
+  quadratic: false # If true, use FGW instead of Sinkhorn
+  fused: 5.0 # Fused penalty, used if quadratic=true
+  seed: ??? # The random seed
+
+# Configuration for the neural potential function
+potential:
+  features: [32, 32]
+
+# Configuration for the proximal step. Type may be:
+# "linear_explicit", "monge_linear_implicit", "icnn_linear_implicit"
+step:
+  type: "linear_explicit" # The type of proximal step
+  implicit_diff: true # Used if type="*_implicit"
+  maxiter: 100 # Used if type="*_implicit"
+
+# Configuration for the optimizer
+optimizer:
+  train_val_split: 0.75 # Proportion of train in the train/val split
+  learning_rate: 0.01 # Learning rate of the optimizer
+  checkpoint_interval: 1 # Try to save weights every x iter.
+  max_iter: 200_000 # Maximum number of iter
+  batch_size: 1_000 # The batch size
+  min_delta: 0.00001
+  patience: 1_000
+
+# Configuration for Weights & Biases
+wandb:
+  mode: "offline"

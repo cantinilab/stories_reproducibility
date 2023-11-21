@@ -14,6 +14,7 @@ class LinearExplicitStep(ProximalStep):
     def inference_step(
         self,
         x: jnp.ndarray,
+        a: jnp.ndarray,
         potential_fun: Callable,
         tau: float,
     ) -> jnp.ndarray:
@@ -22,6 +23,7 @@ class LinearExplicitStep(ProximalStep):
 
         Args:
             x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
+            a (jnp.ndarray): The input histogram (batch_size,)
             potential_fun (Callable): A potential function.
             tau (float): The time step, which should be greater than 0.
 
@@ -35,6 +37,7 @@ class LinearExplicitStep(ProximalStep):
     def training_step(
         self,
         x: jnp.ndarray,
+        a: jnp.ndarray,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
@@ -45,6 +48,7 @@ class LinearExplicitStep(ProximalStep):
 
         Args:
             x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
+            a (jnp.ndarray): The input histogram (batch_size,)
             potential_network (nn.Module): A potential function parameterized by a
             neural network.
             potential_params (optax.Params): The parameters of the potential network.
@@ -58,4 +62,4 @@ class LinearExplicitStep(ProximalStep):
         potential_fun = lambda u: potential_network.apply(potential_params, u)
 
         # Then simply apply the inference step since it's differentiable.
-        return self.inference_step(x, potential_fun, tau)
+        return self.inference_step(x, a, potential_fun, tau)

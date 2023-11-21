@@ -1,0 +1,23 @@
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=artista random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_artista_1" model.quadratic=true model.fused=1.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=artista random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_artista_3" model.quadratic=true model.fused=3.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=artista random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_artista_5" model.quadratic=true model.fused=5.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=artista random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_artista_10" model.quadratic=true model.fused=10.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=artista random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/lin_artista" model.quadratic=false model.fused=999.0 > /dev/null 2>&1 &
+
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_zesta_1" model.quadratic=true model.fused=1.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_zesta_3" model.quadratic=true model.fused=3.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_zesta_5" model.quadratic=true model.fused=5.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_zesta_10" model.quadratic=true model.fused=10.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/lin_zesta" model.quadratic=false model.fused=999.0 > /dev/null 2>&1 &
+
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=mosta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_mosta_1" model.quadratic=true model.fused=1.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=mosta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_mosta_3" model.quadratic=true model.fused=3.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=mosta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_mosta_5" model.quadratic=true model.fused=5.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=mosta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/quad_mosta_10" model.quadratic=true model.fused=10.0 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=mosta random_space=false,true model.seed=1959,30263,10658,2710,5159 checkpoint_path="tmp/lin_mosta" model.quadratic=false model.fused=999.0 > /dev/null 2>&1 &
+
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta model.seed=30263 checkpoint_path="tmp/quad_zesta_1" model.quadratic=true model.fused=1.0 optimizer.learning_rate=0.01 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta model.seed=30263 checkpoint_path="tmp/quad_zesta_3" model.quadratic=true model.fused=3.0 optimizer.learning_rate=0.01 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta model.seed=30263 checkpoint_path="tmp/quad_zesta_5" model.quadratic=true model.fused=5.0 optimizer.learning_rate=0.01 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta model.seed=30263 checkpoint_path="tmp/quad_zesta_10" model.quadratic=true model.fused=10.0 optimizer.learning_rate=0.01 > /dev/null 2>&1 &
+poetry run python3 scripts/train.py --multirun hydra/launcher=gpu +organism=zesta model.seed=30263 checkpoint_path="tmp/lin_zesta" model.quadratic=false model.fused=999.0 optimizer.learning_rate=0.01 > /dev/null 2>&1 &

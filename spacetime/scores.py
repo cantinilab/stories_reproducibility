@@ -74,14 +74,14 @@ def gromov_wasserstein_distance(
     # TODO specify epsilon
 
     # Initialize the Optimal Transport problem.
-    geom_xy = PointCloud(x_pred, x_real)
-    geom_xx = PointCloud(space_pred, space_pred)
-    geom_yy = PointCloud(space_real, space_real)
+    geom_xy = PointCloud(x_pred, x_real, epsilon=1.0)
+    geom_xx = PointCloud(space_pred, space_pred, epsilon=1.0)
+    geom_yy = PointCloud(space_real, space_real, epsilon=1.0)
     problem = QuadraticProblem(geom_xx, geom_yy, geom_xy=geom_xy, fused_penalty=fused)
 
     # Define the solver, either full rank or low-rank.
     linear_ot_solver = Sinkhorn if rank == -1 else LRSinkhorn
-    solver = GromovWasserstein(rank=rank, linear_ot_solver=linear_ot_solver)
+    solver = GromovWasserstein(rank=rank)  # , linear_ot_solver=linear_ot_solver)
 
     # Solve the problem and check covnergence.
     out = solver(problem, rng=key)
