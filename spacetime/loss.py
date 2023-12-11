@@ -5,7 +5,7 @@ from ott.solvers.linear.sinkhorn import Sinkhorn
 from ott.solvers.linear.implicit_differentiation import ImplicitDiff
 from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein
 from ott.geometry.pointcloud import PointCloud
-from typing import Callable, Dict
+from typing import Dict
 from ott.problems.linear.linear_problem import LinearProblem
 import jax.numpy as jnp
 import optax
@@ -18,11 +18,10 @@ def linear_loss(
     y: jnp.ndarray,
     b: jnp.ndarray,
     epsilon: float,
-    cost_fn: Callable,
     balancedness: float,
     debias: bool,
 ) -> jnp.ndarray:
-    """Compute the Sinkhorn loss. This ignores the spatial component.
+    """Compute the Sinkhorn loss (no quadratic component).
 
     Args:
         x: A pointcloud.
@@ -30,7 +29,6 @@ def linear_loss(
         y: Another pointcloud.
         b: Histogram on y.
         epsilon: Entropic regularization parameter.
-        cost_fn: Cost function for optimal transport.
         balancedness: Between 0 and 1, 1 being balanced optimal transport.
         debias: Whether to debias the loss.
 
@@ -39,9 +37,11 @@ def linear_loss(
     """
 
     # Define geometries, compute epsilon relative to the yy geometry.
-    geom_yy = PointCloud(y, y, epsilon=epsilon, cost_fn=cost_fn, relative_epsilon=True)
-    geom_xx = PointCloud(x, x, cost_fn=cost_fn).copy_epsilon(geom_yy)
-    geom_xy = PointCloud(x, y, cost_fn=cost_fn).copy_epsilon(geom_yy)
+    # For Sinkhorn, epsilon is defined in the Geometry.
+    # For FGW, it is defined in the solver.
+    geom_yy = PointCloud(y, y, epsilon=epsilon, relative_epsilon=True)
+    geom_xx = PointCloud(x, x).copy_epsilon(geom_yy)
+    geom_xy = PointCloud(x, y).copy_epsilon(geom_yy)
 
     # Define some hyperparameters.
     lin_kwds = {"tau_a": balancedness, "tau_b": balancedness}
@@ -49,19 +49,19 @@ def linear_loss(
 
     # Compute the Sinkhorn loss between point clouds x and y.
     problem = LinearProblem(geom_xy, a=a, b=b, **lin_kwds)
-    ott_solver = Sinkhorn(threshold=1e-3, implicit_diff=implicit_diff)
+    ott_solver = Sinkhorn(implicit_diff=implicit_diff)
     ot_loss = ott_solver(problem).reg_ot_cost
 
     # We assume x and y to have the same mass, so no need for the m(a) - m(b) term.
     if debias:
         # Debias the Sinkhorn loss with the xx term.
         problem = LinearProblem(geom_xx, a=a, b=a, **lin_kwds)
-        ott_solver = Sinkhorn(threshold=1e-3, implicit_diff=implicit_diff)
+        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
         # Debias the Sinkhorn loss with the yy term.
         problem = LinearProblem(geom_yy, a=b, b=b, **lin_kwds)
-        ott_solver = Sinkhorn(threshold=1e-3, implicit_diff=implicit_diff)
+        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
     return ot_loss
@@ -88,8 +88,6 @@ def quadratic_loss(
              FGW(x, y) - 0.5 * FGW(x, x) - 0.5 * FGW(y, y)
     As done in http://proceedings.mlr.press/v97/bunne19a/bunne19a.pdf
 
-    TODO: specify a cost_fn
-
     Args:
         x: A pointcloud on the space of genes.
         a: Histogram on x.
@@ -107,6 +105,8 @@ def quadratic_loss(
     """
 
     # Define geometries on space for xx, yy, and on genes for xy, xx and yy.
+    # For Sinkhorn, epsilon is defined in the Geometry.
+    # For FGW, it is defined in the solver.
     geom_s_x = PointCloud(space_x)
     geom_s_y = PointCloud(space_y)
     geom_xy = PointCloud(x, y)
@@ -154,11 +154,9 @@ def loss_fn(
     potential: nn.Module,
     n_steps: int,
     epsilon: float,
-    cost_fn: Callable,
     balancedness: float,
     debias: bool,
     fused_penalty: float,
-    ott_solver: Callable,
     tau_diff: jnp.ndarray,
 ) -> jnp.ndarray:
     """The loss function
@@ -172,19 +170,14 @@ def loss_fn(
         potential: The potential function parametrized by a neural network.
         n_steps: The number of steps to take.
         epsilon: Entropic regularization parameter.
-        cost_fn: Cost function for optimal transport. TODO: for now not used by FGW
         balancedness: Between 0 and 1, 1 being balanced optimal transport.
         debias: Whether to debias the loss (see linear_loss or quadratic_loss).
         fused_penalty: Parameter indicting weight of the fused term.
-        ott_solver: The OTT solver to use, i.e. an instance of (LR)GromovWasserstein.
         tau_diff: The difference in time between each timepoint, e.g. [1., 1., 2.].
 
     Returns:
         The loss.
     """
-
-    # Get the batch's x and space coordinates.
-    batch_x, batch_space, batch_a = batch["x"], batch["space"], batch["a"]
 
     # This is a helper function to compute the loss for a single timepoint.
     # We will chain this function over the timepoints using lax.scan.
@@ -217,7 +210,6 @@ def loss_fn(
                 a=_a[t],
                 y=_x[t + 1],
                 b=_a[t + 1],
-                cost_fn=cost_fn,
                 epsilon=epsilon,
                 balancedness=balancedness,
                 debias=debias,
@@ -236,16 +228,14 @@ def loss_fn(
         _a = jax.lax.cond(teacher_forcing, lambda u: u, replace_fn, _a)
 
         # Return the data for the next iteration and the current loss.
-        # Note the scaling by tau_diff[t] to give more weight to large time gaps.
-        return (_x, _space, _a), ot_loss * tau_diff[t]
+        return (_x, _space, _a), ot_loss
 
     # Iterate through timepoints efficiently. ot_loss becomes a 1-D array.
     # Notice that we do not compute the loss for the last timepoint, because there
     # is no next observation to compare to.
-    timepoints = jnp.arange(len(batch_x) - 1)
-    _, ot_loss = jax.lax.scan(
-        _through_time, (batch_x, batch_space, batch_a), timepoints
-    )
+    timepoints = jnp.arange(len(batch["x"]) - 1)
+    init_carry = (batch["x"], batch["space"], batch["a"])
+    _, ot_loss = jax.lax.scan(_through_time, init_carry, timepoints)
 
-    # Sum the losses over all timepoints.
-    return jnp.sum(ot_loss)
+    # Sum the losses over all timepoints, weighted by tau_diff.
+    return jnp.sum(tau_diff * ot_loss)

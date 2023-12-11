@@ -7,7 +7,7 @@ from jax import grad, vmap
 from .proximal_step import ProximalStep
 
 
-class LinearExplicitStep(ProximalStep):
+class ExplicitStep(ProximalStep):
     """This class implements the explicit proximal step associated with the Wasserstein
     distance, i.e. :math:`v = -\nabla \phi(x)`, where :math:`\phi` is a potential."""
 
@@ -18,7 +18,7 @@ class LinearExplicitStep(ProximalStep):
         potential_fun: Callable,
         tau: float,
     ) -> jnp.ndarray:
-        """Performs a linear explicit step on the input distribution and returns the
+        """Performs an explicit step on the input distribution and returns the
         updated distribution, given a potential function.
 
         Args:
@@ -31,7 +31,7 @@ class LinearExplicitStep(ProximalStep):
             jnp.ndarray: The updated distribution of size (batch_size, n_dims).
         """
 
-        # The linear explicit step is a step of gradient descent.
+        # The explicit step is a step of gradient descent.
         return x - tau * vmap(grad(potential_fun))(x)
 
     def training_step(
@@ -42,7 +42,7 @@ class LinearExplicitStep(ProximalStep):
         potential_params: optax.Params,
         tau: float,
     ) -> jnp.ndarray:
-        """Performs a linear explicit step on the input distribution and returns the
+        """Performs an explicit step on the input distribution and returns the
         updated distribution. This function differs from the inference step in that it
         takes a potential network as input and returns the updated distribution.
 

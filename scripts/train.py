@@ -22,6 +22,10 @@ def main(cfg: DictConfig) -> None:
         import spacetime
         from spacetime import potentials, steps
 
+        # Some shorthands.
+        space_obsm = cfg.organism.space_obsm
+        x_obsm = cfg.organism.obsm
+
         # Setup Weights & Biases.
         config = flatten(OmegaConf.to_container(cfg, resolve=True), reducer="dot")
         wandb.init(project="train_spacetime", config=config, mode=cfg.wandb.mode)
@@ -41,8 +45,8 @@ def main(cfg: DictConfig) -> None:
         print("Loaded data.")
 
         # Select a given number of principal components then normalize the embedding.
-        adata.obsm[cfg.organism.obsm] = adata.obsm[cfg.organism.obsm][:, : cfg.n_pcs]
-        adata.obsm[cfg.organism.obsm] /= adata.obsm[cfg.organism.obsm].max()
+        adata.obsm[x_obsm] = adata.obsm[x_obsm][:, : cfg.n_pcs]
+        adata.obsm[x_obsm] /= adata.obsm[x_obsm].max()
         print("Normalized embedding.")
 
         # Keep only the training batches.
@@ -52,17 +56,15 @@ def main(cfg: DictConfig) -> None:
 
         # Center and scale each timepoint in space.
         timepoints = np.sort(np.unique(adata.obs[cfg.organism.time_obs]))
-        adata.obsm[cfg.organism.space_obsm] = adata.obsm[
-            cfg.organism.space_obsm
-        ].astype(float)
+        adata.obsm[space_obsm] = adata.obsm[space_obsm].astype(float)
         for t in timepoints:
             idx = adata.obs[cfg.organism.time_obs] == t
 
-            mu = np.mean(adata.obsm[cfg.organism.space_obsm][idx, :], axis=0)
-            adata.obsm[cfg.organism.space_obsm][idx, :] -= mu
+            mu = np.mean(adata.obsm[space_obsm][idx, :], axis=0)
+            adata.obsm[space_obsm][idx, :] -= mu
 
-            sigma = np.std(adata.obsm[cfg.organism.space_obsm][idx, :], axis=0)
-            adata.obsm[cfg.organism.space_obsm][idx, :] /= sigma
+            sigma = np.std(adata.obsm[space_obsm][idx, :], axis=0)
+            adata.obsm[space_obsm][idx, :] /= sigma
         print("Centered and scaled space.")
 
         # Make the space random if needed.
@@ -70,9 +72,7 @@ def main(cfg: DictConfig) -> None:
             for t in timepoints:
                 idx = np.where(adata.obs[cfg.organism.time_obs] == t)[0]
                 rand_idx = np.random.permutation(idx)
-                adata.obsm[cfg.organism.space_obsm][idx, :] = adata.obsm[
-                    cfg.organism.space_obsm
-                ][rand_idx, :]
+                adata.obsm[space_obsm][idx, :] = adata.obsm[space_obsm][rand_idx, :]
             print("Randomized space.")
 
         # Intialize keyword arguments for the proximal step.
@@ -85,12 +85,12 @@ def main(cfg: DictConfig) -> None:
             step_kwargs["log_callback"] = lambda x: wandb.log(x)
 
         # Choose the proximal step.
-        if cfg.step.type == "linear_explicit":
-            step = steps.LinearExplicitStep()
-        elif cfg.step.type == "monge_linear_implicit":
-            step = steps.MongeLinearImplicitStep(**step_kwargs)
-        elif cfg.step.type == "icnn_linear_implicit":
-            step = steps.ICNNLinearImplicitStep(**step_kwargs)
+        if cfg.step.type == "explicit":
+            step = steps.ExplicitStep()
+        elif cfg.step.type == "monge_implicit":
+            step = steps.MongeImplicitStep(**step_kwargs)
+        elif cfg.step.type == "icnn_implicit":
+            step = steps.ICNNImplicitStep(**step_kwargs)
         else:
             raise ValueError(f"Step {cfg.step.type} not recognized.")
 
@@ -129,13 +129,12 @@ def main(cfg: DictConfig) -> None:
         my_model.fit(
             adata=adata,
             time_obs=cfg.organism.time_obs,
-            x_obsm=cfg.organism.obsm,
-            space_obsm=cfg.organism.space_obsm,
+            x_obsm=x_obsm,
+            space_obsm=space_obsm,
             optimizer=optax.chain(
                 optax.adamw(scheduler),
                 optax.clip_by_global_norm(10.0),
             ),
-            # optimizer=optax.adam(scheduler),
             max_iter=cfg.optimizer.max_iter,
             batch_size=cfg.optimizer.batch_size,
             train_val_split=cfg.optimizer.train_val_split,

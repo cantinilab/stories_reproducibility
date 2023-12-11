@@ -6,9 +6,10 @@ import jax.numpy as jnp
 import jaxopt
 import optax
 from .proximal_step import ProximalStep
+from ott.solvers.nn.models import ICNN
 
 
-class MongeLinearImplicitStep(ProximalStep):
+class ICNNImplicitStep(ProximalStep):
     """This class defines an implicit proximal step corresponding to the squared
     Wasserstein distance, assuming the transportation plan is the identity (each cell
     mapped to itself). This step is "implicit" in the sense that instead of computing a
@@ -46,17 +47,17 @@ class MongeLinearImplicitStep(ProximalStep):
     def inference_step(
         self,
         x: jnp.ndarray,
-        # a: jnp.ndarray,
+        a: jnp.ndarray,
         potential_fun: Callable,
         tau: float,
     ) -> jnp.ndarray:
-        """Performs a linear implicit step on the input distribution and returns the
+        """Performs an implicit step on the input distribution and returns the
         updated distribution, given a potential function. If logging is available,
         logs the proximal cost.
 
         Args:
             x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            a (jnp.ndarray): The input histogram (batch_size,) TODO: implement a
+            a (jnp.ndarray): The input histogram (batch_size,)
             potential_fun (Callable): A potential function.
             tau (float): The time step, which should be greater than 0.
 
@@ -64,47 +65,57 @@ class MongeLinearImplicitStep(ProximalStep):
             jnp.ndarray: The updated distribution of size (batch_size, n_dims).
         """
 
+        icnn = ICNN(dim_data=x.shape[1], dim_hidden=[32, 32, 32])
+        params_icnn = icnn.init(jax.random.PRNGKey(0), x)["params"]
+
         # Define a helper function to compute the proximal cost.
-        def proximal_cost(y, inner_x):
-            potential_term = jnp.sum(potential_fun(y))
-            return potential_term + tau * 0.5 * jnp.linalg.norm(inner_x - y) ** 2
+        def proximal_cost(params_icnn, inner_x, inner_a, inner_tau):
+            params_dict = {"params": params_icnn}
+            icnn_fun = lambda u: jax.grad(icnn.apply, argnums=1)(params_dict, u)
+            y = jax.vmap(icnn_fun)(inner_x)
+
+            potential_term = jnp.sum(inner_a * potential_fun(y))
+            prox_term = jnp.sum(inner_a.reshape(-1, 1) * (inner_x - y) ** 2)
+            return potential_term + inner_tau * 0.5 * prox_term
 
         # Define the optimizer.
         opt = jaxopt.LBFGS(fun=proximal_cost, **self.opt_hyperparams)
 
         @jax.jit
         def jitted_update(y, state):
-            return opt.update(y, state, inner_x=x)
+            return opt.update(y, state, inner_x=x, inner_a=a, inner_tau=tau)
 
         # Run the gradient descent, and log the proximal cost.
-        y = jnp.zeros_like(x)
-        state = opt.init_state(y, inner_x=x)
+        state = opt.init_state(params_icnn, inner_x=x, inner_a=a, inner_tau=tau)
         for _ in range(self.maxiter):
-            y, state = jitted_update(y, state)
+            params_icnn, state = jitted_update(params_icnn, state)
             if self.log_callback:
                 self.log_callback({"proximal_cost": state.error})
             if state.error < self.tol:
                 break
 
         # Return the new omics coordinates.
+        y = jax.vmap(
+            lambda u: jax.grad(icnn.apply, argnums=1)({"params": params_icnn}, u)
+        )(x)
         return y
 
     def training_step(
         self,
         x: jnp.ndarray,
-        # a: jnp.ndarray,
+        a: jnp.ndarray,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
     ) -> jnp.ndarray:
-        """Performs a linear implicit step on the input distribution and returns the
+        """Performs an implicit step on the input distribution and returns the
         updated distribution. This function differs from the inference step in that it
         takes a potential network as input and returns the updated distribution. Logging
         is not available in this function because it rpevents implicit differentiation.
 
         Args:
             x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            a (jnp.ndarray): The input histogram (batch_size,) TODO implement a
+            a (jnp.ndarray): The input histogram (batch_size,)
             potential_network (nn.Module): A potential function parameterized by a
             neural network.
             potential_params (optax.Params): The parameters of the potential network.
@@ -114,21 +125,31 @@ class MongeLinearImplicitStep(ProximalStep):
             jnp.ndarray: The updated distribution of size (batch_size, n_dims).
         """
 
+        icnn = ICNN(dim_data=x.shape[1], dim_hidden=[32, 32, 32])
+        params_icnn = icnn.init(jax.random.PRNGKey(0), x)["params"]
+
         # Define a helper function to compute the proximal cost.
-        def proximal_cost(y, inner_x, inner_potential_params, inner_tau):
-            potential_term = jnp.sum(potential_network.apply(inner_potential_params, y))
-            return potential_term + inner_tau * 0.5 * jnp.linalg.norm(inner_x - y) ** 2
+        def proximal_cost(params_icnn, inner_x, inner_pot_params, inner_tau, inner_a):
+            params_dict = {"params": params_icnn}
+            icnn_fun = lambda u: jax.grad(icnn.apply, argnums=1)(params_dict, u)
+            y = jax.vmap(icnn_fun)(inner_x)
+            pot_fun = lambda u: potential_network.apply(inner_pot_params, u)
+            potential_term = jnp.sum(inner_a * pot_fun(y))
+            prox_term = jnp.sum(inner_a.reshape(-1, 1) * (inner_x - y) ** 2)
+            return potential_term + inner_tau * 0.5 * prox_term
 
         # Define the optimizer.
         opt = jaxopt.LBFGS(fun=proximal_cost, **self.opt_hyperparams)
 
         # Run the optimization loop.
-        y, _ = opt.run(
-            jnp.zeros_like(x),
+        params_icnn, _ = opt.run(
+            params_icnn,
             inner_x=x,
-            inner_potential_params=potential_params,
+            inner_pot_params=potential_params,
             inner_tau=tau,
+            inner_a=a,
         )
 
         # Return the new omics coordinates.
-        return y
+        icnn_fun = lambda u: jax.grad(icnn.apply, argnums=1)({"params": params_icnn}, u)
+        return jax.vmap(icnn_fun)(x)

@@ -25,7 +25,7 @@ def main(cfg: DictConfig) -> None:
         from matplotlib.patches import ConnectionPatch
         from ott.solvers.linear.sinkhorn import Sinkhorn
         from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein
-        from spacetime import potentials, scores
+        from spacetime import scores
 
         ################################ Get the configuration ###############################
 

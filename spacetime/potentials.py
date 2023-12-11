@@ -2,8 +2,7 @@ from typing import Sequence
 
 import flax.linen as nn
 from flax.linen.activation import softplus
-from flax.linen.initializers import he_uniform, zeros_init, constant
-import jax.numpy as jnp
+from flax.linen.initializers import he_uniform, zeros_init
 
 
 class MLPPotential(nn.Module):

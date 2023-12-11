@@ -1,4 +1,3 @@
-skip_last: true # Skip the last timepoint for testing purposes
 random_space: false # Make the space random for ablation study
 checkpoint_path: "tmp" # Path to save the checkpoints
 n_pcs: 20 # Number of principal components to use
@@ -19,9 +18,9 @@ potential:
   features: [128, 128]
 
 # Configuration for the proximal step. Type may be:
-# "linear_explicit", "monge_linear_implicit", "icnn_linear_implicit"
+# "explicit", "monge_implicit", "icnn_implicit"
 step:
-  type: "linear_explicit" # The type of proximal step
+  type: "explicit" # The type of proximal step
   implicit_diff: true # Used if type="*_implicit"
   maxiter: 100 # Used if type="*_implicit"
 
