@@ -1,6 +1,9 @@
 from .steps.proximal_step import ProximalStep
 import flax.linen as nn
 from ott.problems.quadratic.quadratic_problem import QuadraticProblem
+from ott.solvers.linear.sinkhorn import Sinkhorn
+from ott.solvers.linear.implicit_differentiation import ImplicitDiff
+from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein
 from ott.geometry.pointcloud import PointCloud
 from typing import Callable, Dict
 from ott.problems.linear.linear_problem import LinearProblem
@@ -17,7 +20,6 @@ def linear_loss(
     epsilon: float,
     cost_fn: Callable,
     balancedness: float,
-    ott_solver: Callable,
     debias: bool,
 ) -> jnp.ndarray:
     """Compute the Sinkhorn loss. This ignores the spatial component.
@@ -30,32 +32,36 @@ def linear_loss(
         epsilon: Entropic regularization parameter.
         cost_fn: Cost function for optimal transport.
         balancedness: Between 0 and 1, 1 being balanced optimal transport.
-        ott_solver: The OTT solver to use, i.e. an instance of Sinkhorn or LRSinkhorn.
         debias: Whether to debias the loss.
 
     Returns:
         The Sinkhorn loss.
     """
 
+    # Define geometries, compute epsilon relative to the yy geometry.
+    geom_yy = PointCloud(y, y, epsilon=epsilon, cost_fn=cost_fn, relative_epsilon=True)
+    geom_xx = PointCloud(x, x, cost_fn=cost_fn).copy_epsilon(geom_yy)
+    geom_xy = PointCloud(x, y, cost_fn=cost_fn).copy_epsilon(geom_yy)
+
+    # Define some hyperparameters.
+    lin_kwds = {"tau_a": balancedness, "tau_b": balancedness}
+    implicit_diff = ImplicitDiff(symmetric=True)
+
     # Compute the Sinkhorn loss between point clouds x and y.
-    geom_xy = PointCloud(x, y, epsilon=epsilon, cost_fn=cost_fn)
-    problem = LinearProblem(geom_xy, a=a, b=b, tau_a=balancedness, tau_b=balancedness)
+    problem = LinearProblem(geom_xy, a=a, b=b, **lin_kwds)
+    ott_solver = Sinkhorn(threshold=1e-3, implicit_diff=implicit_diff)
     ot_loss = ott_solver(problem).reg_ot_cost
 
     # We assume x and y to have the same mass, so no need for the m(a) - m(b) term.
     if debias:
         # Debias the Sinkhorn loss with the xx term.
-        geom_bias = PointCloud(x, epsilon=epsilon, cost_fn=cost_fn)
-        problem = LinearProblem(
-            geom_bias, a=a, b=a, tau_a=balancedness, tau_b=balancedness
-        )
+        problem = LinearProblem(geom_xx, a=a, b=a, **lin_kwds)
+        ott_solver = Sinkhorn(threshold=1e-3, implicit_diff=implicit_diff)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
         # Debias the Sinkhorn loss with the yy term.
-        geom_bias = PointCloud(y, epsilon=epsilon, cost_fn=cost_fn)
-        problem = LinearProblem(
-            geom_bias, a=b, b=b, tau_a=balancedness, tau_b=balancedness
-        )
+        problem = LinearProblem(geom_yy, a=b, b=b, **lin_kwds)
+        ott_solver = Sinkhorn(threshold=1e-3, implicit_diff=implicit_diff)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
     return ot_loss
@@ -71,7 +77,6 @@ def quadratic_loss(
     epsilon: float,
     fused_penalty: float,
     balancedness: float,
-    ott_solver: Callable,
     debias: bool,
 ) -> jnp.ndarray:
     """FGW loss
@@ -95,17 +100,18 @@ def quadratic_loss(
         epsilon: Entropic regularization parameter.
         fused_penalty: The penalty for the fused term.
         balancedness: Between 0 and 1, 1 being balanced optimal transport.
-        ott_solver: The OTT solver to use, i.e. an instance of (LR)GromovWasserstein.
         debias: Whether to debias the loss.
 
     Returns:
         The FGW loss.
     """
 
-    # Define geometries on space for xx, yy, and on genes for xy.
-    geom_xx = PointCloud(space_x, space_x, epsilon=epsilon, scale_cost="max_cost")
-    geom_yy = PointCloud(space_y, space_y, epsilon=epsilon, scale_cost="max_cost")
-    geom_xy = PointCloud(x, y, epsilon=epsilon)
+    # Define geometries on space for xx, yy, and on genes for xy, xx and yy.
+    geom_s_x = PointCloud(space_x)
+    geom_s_y = PointCloud(space_y)
+    geom_xy = PointCloud(x, y)
+    geom_xx = PointCloud(x)
+    geom_yy = PointCloud(y)
 
     # These keyword arguments are passed to all quadratic problems.
     fused_kwds = {
@@ -114,24 +120,29 @@ def quadratic_loss(
         "tau_b": balancedness,
         "gw_unbalanced_correction": False,
     }
+    gw_kwds = {"threshold": 1e-3, "implicit_diff": ImplicitDiff(symmetric=True)}
+
+    # Compute FGW on yy, which will determine the relative epsilon.
+    problem = QuadraticProblem(geom_s_y, geom_s_y, geom_yy, a=b, b=b, **fused_kwds)
+    ott_solver = GromovWasserstein(**gw_kwds, epsilon=epsilon, relative_epsilon=True)
+    out_yy = ott_solver(problem)
 
     # Compute the FGW loss between point clouds x and y.
-    problem = QuadraticProblem(geom_xx, geom_yy, geom_xy, a=a, b=b, **fused_kwds)
+    problem = QuadraticProblem(geom_s_x, geom_s_y, geom_xy, a=a, b=b, **fused_kwds)
+    ott_solver = GromovWasserstein(**gw_kwds, epsilon=out_yy.geom.epsilon)
     ot_loss = ott_solver(problem).reg_gw_cost
 
     if debias:
         # Substracting 0.5 * FGW(x, x).
-        geom_bias = PointCloud(x, x, epsilon=epsilon)
-        problem = QuadraticProblem(geom_xx, geom_xx, geom_bias, a=a, b=a, **fused_kwds)
+        problem = QuadraticProblem(geom_s_x, geom_s_x, geom_xx, a=a, b=a, **fused_kwds)
+        ott_solver = GromovWasserstein(**gw_kwds, epsilon=out_yy.geom.epsilon)
         ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
 
         # Substracting 0.5 * FGW(y, y).
-        geom_bias = PointCloud(y, y, epsilon=epsilon)
-        problem = QuadraticProblem(geom_yy, geom_yy, geom_bias, a=b, b=b, **fused_kwds)
-        ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
+        ot_loss -= 0.5 * out_yy.reg_gw_cost
 
     # Rescale to make losses more comparable across fused penalty.
-    return ot_loss / fused_penalty
+    return ot_loss / (1 + fused_penalty)
 
 
 def loss_fn(
@@ -198,7 +209,6 @@ def loss_fn(
                 fused_penalty=fused_penalty,
                 epsilon=epsilon,
                 balancedness=balancedness,
-                ott_solver=ott_solver,
                 debias=debias,
             )
         else:
@@ -210,7 +220,6 @@ def loss_fn(
                 cost_fn=cost_fn,
                 epsilon=epsilon,
                 balancedness=balancedness,
-                ott_solver=ott_solver,
                 debias=debias,
             )
 

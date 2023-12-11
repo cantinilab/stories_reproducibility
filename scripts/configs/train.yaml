@@ -6,6 +6,7 @@ n_pcs: 20 # Number of principal components to use
 # Configuration for the model
 model:
   epsilon: 0.01 # The entropic regularization for the outer loss
+  debias: true # Whether to use debiasing
   tau_auto: true # Whether to infer the step size from the time_obs
   tau: 1.0 # The step size, can be set to 1.0 since we learn the potential
   teacher_forcing: true # Whether to use teacher forcing
@@ -15,7 +16,7 @@ model:
 
 # Configuration for the neural potential function
 potential:
-  features: [32, 32]
+  features: [128, 128]
 
 # Configuration for the proximal step. Type may be:
 # "linear_explicit", "monge_linear_implicit", "icnn_linear_implicit"
@@ -32,7 +33,7 @@ optimizer:
   max_iter: 200_000 # Maximum number of iter
   batch_size: 1_000 # The batch size
   min_delta: 0.00001
-  patience: 1_000
+  patience: 200
 
 # Configuration for Weights & Biases
 wandb:

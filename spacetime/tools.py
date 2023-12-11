@@ -13,7 +13,7 @@ class DataLoader:
 
     Args:
         adata (ad.AnnData): The input AnnData object.
-        time_obs (str): The obs field with the integer time observations
+        time_obs (str): The obs field with float time observations
         x_obsm (str): The obsm field with the omics coordinates.
         space_obsm (str): The obsm field with the spatial coordinates.
         batch_size (int): The batch size.
@@ -30,7 +30,9 @@ class DataLoader:
         train_val_split: float,
     ):
         # Check that we have a valid time observation.
-        assert adata.obs[time_obs].dtype == int, "Time observations must be integers."
+        assert (
+            adata.obs[time_obs].dtype.kind in "biuf"
+        ), "Time observations must be numeric."
 
         # If time is valid, then we can get hold of the timepoints and their indices.
         self.timepoints = np.sort(np.unique(adata.obs[time_obs]))

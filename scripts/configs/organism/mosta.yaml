@@ -1,6 +1,9 @@
-dataset_path: "/pasteur/appa/scratch/ghuizing/Mouse_embryo_all_stage_processed.h5ad"
+dataset_path: "/pasteur/appa/scratch/ghuizing/mosta/mosta_processed.h5ad"
 space_obsm: "spatial"
 obsm: "X_pca_harmony"
 viz_obsm: "X_umap"
 annotation_obs: "annotation"
 time_obs: "time"
+train_batches: [E9.5_E1S1,E10.5_E1S1,E11.5_E1S1,E12.5_E1S1,E13.5_E1S1,E14.5_E1S1,E15.5_E1S1]
+early_test_batches: [E13.5_E1S2,E14.5_E1S2]
+late_test_batches: [E13.5_E1S2,E14.5_E1S2]

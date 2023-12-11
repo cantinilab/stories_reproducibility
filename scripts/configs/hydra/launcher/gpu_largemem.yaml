@@ -3,7 +3,7 @@ defaults:
 
 tasks_per_node: 1
 mem_gb: 256
-gres: "gpu:1,gmem:80G"
+gres: "gpu:1"
 qos: "fast"
 partition: "gpu"
 timeout_min: 120

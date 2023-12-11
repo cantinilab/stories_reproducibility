@@ -81,7 +81,12 @@ class SpaceTime:
         # Initialize the OTT solver (quadratic or linear).
         impl_diff = ImplicitDiff(symmetric=True)
         if quadratic:
-            self.ott_solver = GromovWasserstein(threshold=1e-3, implicit_diff=impl_diff)
+            self.ott_solver = GromovWasserstein(
+                threshold=1e-3,
+                implicit_diff=impl_diff,
+                epsilon=self.epsilon,
+                relative_epsilon=True,
+            )
         else:
             self.ott_solver = Sinkhorn(threshold=1e-3, implicit_diff=impl_diff)
 
@@ -131,6 +136,7 @@ class SpaceTime:
             batch_size=batch_size,
             train_val_split=train_val_split,
         )
+        print("Created data loader.")
 
         # If tau_auto, compute tau from the timepoints.
         if self.tau_auto:
@@ -270,7 +276,6 @@ class SpaceTime:
 
             # If so, check early stopping and potentially save the parameters.
             if update_train or update_val:
-
                 # Check for early stopping.
                 if update_train:
                     early_stop_loss = self.train_losses[-1]

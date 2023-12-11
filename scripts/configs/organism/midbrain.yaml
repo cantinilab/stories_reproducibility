@@ -1,6 +1,9 @@
-dataset_path: "/pasteur/appa/scratch/ghuizing/dorsal_midbrain_processed.h5ad"
+dataset_path: "/pasteur/appa/scratch/ghuizing/dorsal_midbrain/dorsal_midbrain_processed.h5ad"
 space_obsm: "spatial"
 obsm: "X_pca_harmony"
 viz_obsm: "X_umap"
 annotation_obs: "annotation"
 time_obs: "time"
+train_batches: [FP200000600TR_E3,SS200000108BR_A3A4,SS200000108BR_B1B2]
+early_test_batches: []
+late_test_batches: []
