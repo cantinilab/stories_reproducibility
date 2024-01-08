@@ -62,8 +62,6 @@ def main(cfg: DictConfig) -> None:
             implicit_diff=eval_cfg.step.implicit_diff,
             max_iter=eval_cfg.step.maxiter,
             features=eval_cfg.potential.features,
-            tau=eval_cfg.model.tau,
-            tau_auto=eval_cfg.model.tau_auto,
             teacher_forcing=eval_cfg.model.teacher_forcing,
             quadratic=eval_cfg.model.quadratic,
             epsilon=eval_cfg.model.epsilon,
@@ -152,13 +150,15 @@ def main(cfg: DictConfig) -> None:
                 out_bias = solver(problem_bias)
                 assert out_bias.converged
                 sinkhorn_bias += float(out_bias.reg_ot_cost)
+
                 cum_sinkhorn_bias += t_diff[i] * sinkhorn_bias
 
             # Save and log the Sinkhorn distance.
             stats = {
                 "timepoint": t,
-                score_name: cum_sinkhorn_dist,
-                f"{score_name}_div": cum_sinkhorn_dist - 0.5 * cum_sinkhorn_bias,
+                score_name: cum_sinkhorn_dist / t_diff.sum(),
+                f"{score_name}_div": (cum_sinkhorn_dist - 0.5 * cum_sinkhorn_bias)
+                / t_diff.sum(),
             }
             wandb.log(stats)
             scores_dict[score_name] = stats
@@ -255,12 +255,12 @@ def main(cfg: DictConfig) -> None:
                     x_real=adata[idx_true].obsm[x_obsm],
                     labels_real=labels_real,
                     x_pred=adata[idx].obsm["pred"],
-                    k=15,
+                    k=5,
                 )
                 cum_l1_dist += t_diff[i] * float(l1_dist)
 
             # Save and log the L1 distance.
-            stats = {"timepoint": t, score_name: cum_l1_dist}
+            stats = {"timepoint": t, score_name: cum_l1_dist / t_diff.sum()}
             wandb.log(stats)
             scores_dict[score_name] = stats
 
@@ -339,7 +339,7 @@ def main(cfg: DictConfig) -> None:
                 cum_fgw_dist += t_diff[i] * float(out.reg_gw_cost)
 
             # Save and log the FGW distance.
-            stats = {"timepoint": t, score_name: cum_fgw_dist}
+            stats = {"timepoint": t, score_name: cum_fgw_dist / t_diff.sum()}
             wandb.log(stats)
             scores_dict[score_name] = stats
 
@@ -452,8 +452,6 @@ def _define_model(
     implicit_diff: bool,
     max_iter: int,
     features: Sequence[int],
-    tau: float,
-    tau_auto: bool,
     teacher_forcing: bool,
     quadratic: bool,
     epsilon: float,
@@ -477,12 +475,12 @@ def _define_model(
         step_kwargs["log_callback"] = lambda x: wandb.log(x)
 
     # Choose the proximal step.
-    if step_type == "linear_explicit":
-        step = steps.LinearExplicitStep()
-    elif step_type == "monge_linear_implicit":
-        step = steps.MongeLinearImplicitStep(**step_kwargs)
-    elif step_type == "monge_quadratic_implicit":
-        step = steps.MongeQuadraticImplicitStep(**step_kwargs)
+    if step_type == "explicit":
+        step = steps.ExplicitStep()
+    elif step_type == "monge_implicit":
+        step = steps.MongeImplicitStep(**step_kwargs)
+    elif step_type == "icnn_implicit":
+        step = steps.ICNNImplicitStep(**step_kwargs)
     else:
         raise ValueError(f"Step {step_type} not recognized.")
 
@@ -490,8 +488,6 @@ def _define_model(
     my_model = spacetime.SpaceTime(
         potential=potentials.MLPPotential(features, activation=gelu),
         proximal_step=step,
-        tau=tau,
-        tau_auto=tau_auto,
         teacher_forcing=teacher_forcing,
         quadratic=quadratic,
         epsilon=epsilon,

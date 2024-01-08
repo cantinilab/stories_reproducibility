@@ -98,8 +98,6 @@ def main(cfg: DictConfig) -> None:
         my_model = spacetime.SpaceTime(
             potential=potentials.MLPPotential(cfg.potential.features, activation=gelu),
             proximal_step=step,
-            tau=cfg.model.tau,
-            tau_auto=cfg.model.tau_auto,
             teacher_forcing=cfg.model.teacher_forcing,
             quadratic=cfg.model.quadratic,
             epsilon=cfg.model.epsilon,
@@ -147,6 +145,7 @@ def main(cfg: DictConfig) -> None:
         wandb.finish()
     except Exception:
         traceback.print_exc(file=sys.stderr)
+        wandb.finish()
         raise
 
 
