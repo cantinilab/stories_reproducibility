@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import jaxopt
 import optax
 from .proximal_step import ProximalStep
-from ott.solvers.nn.models import ICNN
+from ott.neural.models import ICNN
 
 
 class ICNNImplicitStep(ProximalStep):

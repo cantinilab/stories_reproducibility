@@ -160,7 +160,7 @@ class SpaceTime:
             if update_train or update_val:
                 # Check early stopping.
                 last_l = self.train_losses[-1] if update_train else self.val_losses[-1]
-                _, early_stop = early_stop.update(last_l)
+                early_stop = early_stop.update(last_l)
                 if early_stop.should_stop:
                     print("Met early stopping criteria, breaking...")
                     break

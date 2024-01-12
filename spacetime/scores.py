@@ -1,94 +1,55 @@
 from typing import Iterable, Tuple
 
 import jax.numpy as jnp
+import jax
 import numpy as np
-from jax.random import KeyArray, PRNGKey
 from sklearn.neighbors import KNeighborsClassifier
 
-from ott.geometry.pointcloud import PointCloud
-from ott.problems.linear.linear_problem import LinearProblem
-from ott.problems.quadratic.quadratic_problem import QuadraticProblem
-from ott.solvers.linear.sinkhorn import Sinkhorn
-from ott.solvers.linear.sinkhorn_lr import LRSinkhorn
-from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein
 
-
-def sinkhorn_distance(
+@jax.jit
+def chamfer_distance(
     x_real: jnp.ndarray,
     x_pred: jnp.ndarray,
-    rank: int = -1,
-    key: KeyArray = PRNGKey(0),
 ) -> float:
-    """Compute the Sinkhorn distance between two distributions.
+    """Compute the Chamfer distance between two point clouds.
 
     Args:
         x_real (jnp.ndarray): The real distribution.
         x_pred (jnp.ndarray): The predicted distribution.
-        rank (int, optional): If different to -1, use low-rank Sinkhorn. Defaults to -1.
-        key (KeyArray, optional): The random key. Defaults to PRNGKey(0).
 
     Returns:
-        float: The Sinkhorn distance between distributions.
+        float: The Chamfer distance.
     """
-    # TODO specify epsilon
 
-    # Initialize the Optimal Transport problem.
-    geom = PointCloud(x_pred, x_real)
-    problem = LinearProblem(geom)
+    # Compute the distance matrix.
+    dist_matrix = jnp.sum((x_real[:, None, :] - x_pred[None, :, :]) ** 2, axis=-1)
 
-    # Define the solver, either full rank or low-rank.
-    solver = Sinkhorn() if rank == -1 else LRSinkhorn(rank=rank)
-
-    # Solve the problem and check covnergence.
-    out = solver(problem, rng=key)
-    assert out.converged
-
-    # Return the Sinkhorn distance.
-    return out.reg_ot_cost
+    # Compute the Chamfer distance.
+    return jnp.mean(jnp.min(dist_matrix, axis=0)) + jnp.mean(
+        jnp.min(dist_matrix, axis=1)
+    )
 
 
-def gromov_wasserstein_distance(
+@jax.jit
+def hausdorff_distance(
     x_real: jnp.ndarray,
-    space_real: jnp.ndarray,
     x_pred: jnp.ndarray,
-    space_pred: jnp.ndarray,
-    rank: int = -1,
-    fused: float = 1.0,
-    key: KeyArray = PRNGKey(0),
 ) -> float:
-    """Compute the entropy-regularized Gromov-Wasserstein distance
-    between two distributions.
+    """Compute the Hausdorff distance between two point clouds.
 
     Args:
         x_real (jnp.ndarray): The real distribution.
-        space_real (jnp.ndarray): The real spatial coordinates.
         x_pred (jnp.ndarray): The predicted distribution.
-        space_pred (jnp.ndarray): The predicted spatial coordinates.
-        rank (int, optional): If different to -1, use low-rank GW. Defaults to -1.
-        fused (float, optional): The fused penalty. Defaults to 1.0.
-        key (KeyArray, optional): The random key. Defaults to PRNGKey(0).
 
     Returns:
-        float: The Gromov-Wasserstein distance between distributions.
+        float: The Hausdorff distance.
     """
-    # TODO specify epsilon
 
-    # Initialize the Optimal Transport problem.
-    geom_xy = PointCloud(x_pred, x_real, epsilon=1.0)
-    geom_xx = PointCloud(space_pred, space_pred, epsilon=1.0)
-    geom_yy = PointCloud(space_real, space_real, epsilon=1.0)
-    problem = QuadraticProblem(geom_xx, geom_yy, geom_xy=geom_xy, fused_penalty=fused)
+    # Compute the distance matrix.
+    dist_matrix = jnp.sum((x_real[:, None, :] - x_pred[None, :, :]) ** 2, axis=-1)
 
-    # Define the solver, either full rank or low-rank.
-    linear_ot_solver = Sinkhorn if rank == -1 else LRSinkhorn
-    solver = GromovWasserstein(rank=rank)  # , linear_ot_solver=linear_ot_solver)
-
-    # Solve the problem and check covnergence.
-    out = solver(problem, rng=key)
-    assert out.converged
-
-    # Return the Sinkhorn distance.
-    return out.reg_gw_cost
+    # Compute the Hausdorff distance.
+    return jnp.max(jnp.min(dist_matrix, axis=0)) + jnp.max(jnp.min(dist_matrix, axis=1))
 
 
 def knn_classify(

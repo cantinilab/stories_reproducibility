@@ -6,4 +6,4 @@ annotation_obs: "annotation"
 time_obs: "time"
 train_batches: [E9.5_E1S1,E10.5_E1S1,E11.5_E1S1,E12.5_E1S1,E13.5_E1S1,E14.5_E1S1,E15.5_E1S1]
 early_test_batches: [E13.5_E1S2,E14.5_E1S2]
-late_test_batches: [E13.5_E1S2,E14.5_E1S2]
+late_test_batches: [E15.5_E1S2,E16.5_E1S1]

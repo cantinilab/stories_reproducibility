@@ -5,6 +5,9 @@ from typing import Sequence
 import traceback
 import sys
 
+# from jax import config
+# config.update("jax_enable_x64", True)
+
 
 @hydra.main(version_base=None, config_path="configs", config_name="evaluate")
 def main(cfg: DictConfig) -> None:
@@ -15,6 +18,7 @@ def main(cfg: DictConfig) -> None:
         import matplotlib.pyplot as plt
         import numpy as np
         import pandas as pd
+        import jax.numpy as jnp
         import seaborn as sns
         import wandb
         from flatten_dict import flatten
@@ -24,7 +28,7 @@ def main(cfg: DictConfig) -> None:
         from ott.problems.quadratic.quadratic_problem import QuadraticProblem
         from matplotlib.patches import ConnectionPatch
         from ott.solvers.linear.sinkhorn import Sinkhorn
-        from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein
+        from ott.solvers.quadratic.gromov_wasserstein_lr import LRGromovWasserstein
         from spacetime import scores
 
         ################################ Get the configuration ###############################
@@ -119,9 +123,8 @@ def main(cfg: DictConfig) -> None:
                 # Define the geometry.
                 geom_yy = PointCloud(
                     adata.obsm[x_obsm][idx_true],
-                    batch_size=512,
                     epsilon=0.1,
-                    relative_epsilon=True,
+                    batch_size=512,
                 )
                 geom_xx = PointCloud(adata.obsm["pred"][idx], batch_size=512)
                 geom_xx = geom_xx.copy_epsilon(geom_yy)
@@ -133,7 +136,7 @@ def main(cfg: DictConfig) -> None:
 
                 # Compute the Sinkhorn distance.
                 problem = LinearProblem(geom_xy)
-                solver = Sinkhorn()
+                solver = Sinkhorn(inner_iterations=100, max_iterations=10_000)
                 out = solver(problem)
                 assert out.converged
                 sinkhorn_dist = float(out.reg_ot_cost)
@@ -236,11 +239,75 @@ def main(cfg: DictConfig) -> None:
 
         ########## Compute the difference between real and kNN predicted histograms. #########
 
-        def _l1(idx_batches, score_name):
-            # For each timepoint, compute the L1 distance.
+        # def _l1(idx_batches, score_name):
+        #     # For each timepoint, compute the L1 distance.
+        #     timepoints = np.sort(adata[idx_batches].obs[time_obs].unique())
+        #     t_diff = np.diff(timepoints).astype(float)
+        #     cum_l1_dist = 0.0
+        #     for i, t in enumerate(timepoints[:-1]):
+        #         # Get indices for the prediction and the ground-truth.
+        #         idx = adata.obs[time_obs] == t
+        #         idx &= idx_batches
+
+        #         idx_true = adata.obs[time_obs] == timepoints[i + 1]
+        #         idx_true &= idx_batches
+
+        #         # Compute the L1 distance.
+        #         labels_real = adata[idx_true].obs[annotation_obs]
+        #         l1_dist, labels_pred = scores.compare_real_and_knn_histograms(
+        #             x_real=adata[idx_true].obsm[x_obsm],
+        #             labels_real=labels_real,
+        #             x_pred=adata[idx].obsm["pred"],
+        #             k=5,
+        #         )
+        #         cum_l1_dist += t_diff[i] * float(l1_dist)
+
+        #     # Save and log the L1 distance.
+        #     stats = {"timepoint": t, score_name: cum_l1_dist / t_diff.sum()}
+        #     wandb.log(stats)
+        #     scores_dict[score_name] = stats
+
+        #     return labels_real, labels_pred
+
+        # labels_real, labels_pred = _l1(idx_train, "train_L1")
+        # labels_real, labels_pred = _l1(idx_early_test, "early_test_L1")
+        # labels_real, labels_pred = _l1(idx_late_test, "late_test_L1")
+
+        # # plot the last histogram
+        # histo_list = []
+        # for label in np.unique(labels_real):
+        #     histo_list.append(
+        #         {
+        #             "cell type": label,
+        #             "prop": np.mean(labels_real == label),
+        #             "type": "real",
+        #         }
+        #     )
+        #     histo_list.append(
+        #         {
+        #             "cell type": label,
+        #             "prop": np.mean(labels_pred == label),
+        #             "type": "pred",
+        #         }
+        #     )
+
+        # scores_dict["histo_list"] = histo_list
+
+        # histo_df = pd.DataFrame(histo_list)
+        # sns.barplot(data=histo_df, y="cell type", x="prop", hue="type")
+
+        # # Log the plot.
+        # image = wandb.Image(plt)
+        # wandb.log({"Histograms": image})
+        # plt.close("all")
+
+        ############################ Compute the Hausdorff distance ########################
+
+        def _hausdorff(idx_batches, score_name):
+            # For each timepoint, compute the Hausdorff distance.
             timepoints = np.sort(adata[idx_batches].obs[time_obs].unique())
             t_diff = np.diff(timepoints).astype(float)
-            cum_l1_dist = 0.0
+            cum_hausdorff_dist = 0.0
             for i, t in enumerate(timepoints[:-1]):
                 # Get indices for the prediction and the ground-truth.
                 idx = adata.obs[time_obs] == t
@@ -249,54 +316,52 @@ def main(cfg: DictConfig) -> None:
                 idx_true = adata.obs[time_obs] == timepoints[i + 1]
                 idx_true &= idx_batches
 
-                # Compute the L1 distance.
-                labels_real = adata[idx_true].obs[annotation_obs]
-                l1_dist, labels_pred = scores.compare_real_and_knn_histograms(
-                    x_real=adata[idx_true].obsm[x_obsm],
-                    labels_real=labels_real,
-                    x_pred=adata[idx].obsm["pred"],
-                    k=5,
+                # Compute the Hausdorff distance.
+                hausdorff_dist = scores.hausdorff_distance(
+                    jnp.array(adata[idx_true].obsm[x_obsm]),
+                    jnp.array(adata[idx].obsm["pred"]),
                 )
-                cum_l1_dist += t_diff[i] * float(l1_dist)
+                cum_hausdorff_dist += t_diff[i] * float(hausdorff_dist)
 
-            # Save and log the L1 distance.
-            stats = {"timepoint": t, score_name: cum_l1_dist / t_diff.sum()}
+            # Save and log the Hausdorff distance.
+            stats = {"timepoint": t, score_name: cum_hausdorff_dist / t_diff.sum()}
             wandb.log(stats)
             scores_dict[score_name] = stats
 
-            return labels_real, labels_pred
+        _hausdorff(idx_train, "hausdorff_train")
+        _hausdorff(idx_early_test, "hausdorff_early_test")
+        _hausdorff(idx_late_test, "hausdorff_late_test")
 
-        labels_real, labels_pred = _l1(idx_train, "train_L1")
-        labels_real, labels_pred = _l1(idx_early_test, "early_test_L1")
-        labels_real, labels_pred = _l1(idx_late_test, "late_test_L1")
+        ############################ Compute the Chamfer distance ############################
 
-        # plot the last histogram
-        histo_list = []
-        for label in np.unique(labels_real):
-            histo_list.append(
-                {
-                    "cell type": label,
-                    "prop": np.mean(labels_real == label),
-                    "type": "real",
-                }
-            )
-            histo_list.append(
-                {
-                    "cell type": label,
-                    "prop": np.mean(labels_pred == label),
-                    "type": "pred",
-                }
-            )
+        def _chamfer(idx_batches, score_name):
+            # For each timepoint, compute the Chamfer distance.
+            timepoints = np.sort(adata[idx_batches].obs[time_obs].unique())
+            t_diff = np.diff(timepoints).astype(float)
+            cum_chamfer_dist = 0.0
+            for i, t in enumerate(timepoints[:-1]):
+                # Get indices for the prediction and the ground-truth.
+                idx = adata.obs[time_obs] == t
+                idx &= idx_batches
 
-        scores_dict["histo_list"] = histo_list
+                idx_true = adata.obs[time_obs] == timepoints[i + 1]
+                idx_true &= idx_batches
 
-        histo_df = pd.DataFrame(histo_list)
-        sns.barplot(data=histo_df, y="cell type", x="prop", hue="type")
+                # Compute the Chamfer distance.
+                chamfer_dist = scores.chamfer_distance(
+                    jnp.array(adata[idx_true].obsm[x_obsm]),
+                    jnp.array(adata[idx].obsm["pred"]),
+                )
+                cum_chamfer_dist += t_diff[i] * float(chamfer_dist)
 
-        # Log the plot.
-        image = wandb.Image(plt)
-        wandb.log({"Histograms": image})
-        plt.close("all")
+            # Save and log the Chamfer distance.
+            stats = {"timepoint": t, score_name: cum_chamfer_dist / t_diff.sum()}
+            wandb.log(stats)
+            scores_dict[score_name] = stats
+
+        _chamfer(idx_train, "chamfer_train")
+        _chamfer(idx_early_test, "chamfer_early_test")
+        _chamfer(idx_late_test, "chamfer_late_test")
 
         #################### Compute the Fused Gromov-Wasserstein distance ###################
 
@@ -314,14 +379,8 @@ def main(cfg: DictConfig) -> None:
                 idx_true &= idx_batches
 
                 # Define the geometries.
-                geom_xx = PointCloud(
-                    adata.obsm[space_obsm][idx],
-                    batch_size=512,
-                )
-                geom_yy = PointCloud(
-                    adata.obsm[space_obsm][idx_true],
-                    batch_size=512,
-                )
+                geom_xx = PointCloud(adata.obsm[space_obsm][idx], batch_size=512)
+                geom_yy = PointCloud(adata.obsm[space_obsm][idx_true], batch_size=512)
                 geom_xy = PointCloud(
                     adata.obsm["pred"][idx],
                     adata.obsm[x_obsm][idx_true],
@@ -332,7 +391,11 @@ def main(cfg: DictConfig) -> None:
                 problem = QuadraticProblem(
                     geom_xx, geom_yy, geom_xy, fused_penalty=10.0
                 )
-                solver = GromovWasserstein(epsilon=0.1, relative_epsilon=True)
+                solver = LRGromovWasserstein(
+                    rank=500,
+                    inner_iterations=100,
+                    max_iterations=500_000,
+                )
                 out = solver(problem)
                 print(out.converged)
                 assert out.converged
