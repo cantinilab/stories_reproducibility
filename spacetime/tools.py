@@ -43,7 +43,7 @@ class DataLoader:
 
         # Get the number of features, spatial dimensions, and timepoints.
         self.n_features = self.adata.obsm[self.x_obsm].shape[1]
-        self.n_space = self.adata.obsm[self.space_obsm].shape[1]
+        # self.n_space = self.adata.obsm[self.space_obsm].shape[1]
         self.n_timepoints = len(self.timepoints)
 
     def make_train_val_split(self, key: KeyArray) -> None:
@@ -108,8 +108,8 @@ class DataLoader:
 
             # Get the omics and spatial coordinates for the batch.
             x.append(self.adata.obsm[self.x_obsm][batch_idx])
-            space.append(self.adata.obsm[self.space_obsm][batch_idx])
             a.append(batch_a)
+            space.append(self.adata.obsm[self.space_obsm][batch_idx])
 
         # Return a dictionary of JAX arrays, the first axis being time.
         jnp_stack = lambda x: jnp.array(np.stack(x))

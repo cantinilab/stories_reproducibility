@@ -29,8 +29,8 @@ optimizer:
   checkpoint_interval: 1 # Try to save weights every x iter.
   max_iter: 200_000 # Maximum number of iter
   batch_size: 1_000 # The batch size
-  min_delta: 0.00001
-  patience: 200
+  min_delta: 0.0 # The minimum delta for early stopping
+  patience: 150
 
 # Configuration for Weights & Biases
 wandb:

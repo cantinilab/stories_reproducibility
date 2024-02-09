@@ -3,3 +3,4 @@ wandb:
   mode: "offline"
 
 checkpoint_path: ???
+rank: -1
