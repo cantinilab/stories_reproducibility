@@ -13,14 +13,13 @@ import jax
 
 
 def linear_loss(
-    x: jnp.ndarray,
-    a: jnp.ndarray,
-    y: jnp.ndarray,
-    b: jnp.ndarray,
+    x: jax.Array,
+    a: jax.Array,
+    y: jax.Array,
+    b: jax.Array,
     epsilon: float,
-    balancedness: float,
     debias: bool,
-) -> jnp.ndarray:
+) -> float:
     """Compute the Sinkhorn loss (no quadratic component).
 
     Args:
@@ -29,7 +28,6 @@ def linear_loss(
         y: Another pointcloud.
         b: Histogram on y.
         epsilon: Entropic regularization parameter.
-        balancedness: Between 0 and 1, 1 being balanced optimal transport.
         debias: Whether to debias the loss.
 
     Returns:
@@ -44,41 +42,37 @@ def linear_loss(
     geom_xy = PointCloud(x, y).copy_epsilon(geom_yy)
 
     # Define some hyperparameters.
-    lin_kwds = {"tau_a": balancedness, "tau_b": balancedness}
     implicit_diff = ImplicitDiff(symmetric=True)
 
     # Compute the Sinkhorn loss between point clouds x and y.
-    problem = LinearProblem(geom_xy, a=a, b=b, **lin_kwds)
+    problem = LinearProblem(geom_xy, a=a, b=b)
     ott_solver = Sinkhorn(implicit_diff=implicit_diff)
     ot_loss = ott_solver(problem).reg_ot_cost
 
     # We assume x and y to have the same mass, so no need for the m(a) - m(b) term.
     if debias:
         # Debias the Sinkhorn loss with the xx term.
-        problem = LinearProblem(geom_xx, a=a, b=a, **lin_kwds)
-        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
+        problem = LinearProblem(geom_xx, a=a, b=a)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
         # Debias the Sinkhorn loss with the yy term.
-        problem = LinearProblem(geom_yy, a=b, b=b, **lin_kwds)
-        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
+        problem = LinearProblem(geom_yy, a=b, b=b)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
     return ot_loss
 
 
 def quadratic_loss(
-    x: jnp.ndarray,
-    a: jnp.ndarray,
-    y: jnp.ndarray,
-    b: jnp.ndarray,
-    space_x: jnp.ndarray,
-    space_y: jnp.ndarray,
+    x: jax.Array,
+    a: jax.Array,
+    y: jax.Array,
+    b: jax.Array,
+    space_x: jax.Array,
+    space_y: jax.Array,
     epsilon: float,
     fused_penalty: float,
-    balancedness: float,
     debias: bool,
-) -> jnp.ndarray:
+) -> float:
     """FGW loss
     The linear part of the loss operates on the gene coordinates.
     The quadratic part of the loss operates on the space coordinates.
@@ -97,7 +91,6 @@ def quadratic_loss(
         space_y: Another pointcloud on the space of spatial coordinates.
         epsilon: Entropic regularization parameter.
         fused_penalty: The penalty for the fused term.
-        balancedness: Between 0 and 1, 1 being balanced optimal transport.
         debias: Whether to debias the loss.
 
     Returns:
@@ -107,58 +100,51 @@ def quadratic_loss(
     # Define geometries on space for xx, yy, and on genes for xy, xx and yy.
     # For Sinkhorn, epsilon is defined in the Geometry.
     # For FGW, it is defined in the solver.
-    geom_s_x = PointCloud(space_x)
-    geom_s_y = PointCloud(space_y)
-    geom_xy = PointCloud(x, y)
-    geom_xx = PointCloud(x)
-    geom_yy = PointCloud(y)
+    geom_yy = PointCloud(y, epsilon=epsilon, relative_epsilon=True)
+    geom_s_x = PointCloud(space_x).copy_epsilon(geom_yy)
+    geom_s_y = PointCloud(space_y).copy_epsilon(geom_yy)
+    geom_xy = PointCloud(x, y).copy_epsilon(geom_yy)
+    geom_xx = PointCloud(x).copy_epsilon(geom_yy)
 
     # These keyword arguments are passed to all quadratic problems.
-    fused_kwds = {
-        "fused_penalty": fused_penalty,
-        "tau_a": balancedness,
-        "tau_b": balancedness,
-        "gw_unbalanced_correction": False,
+    fused_kwds = {"fused_penalty": fused_penalty}
+    gw_kwds = {
+        "implicit_diff": ImplicitDiff(symmetric=True),
+        "epsilon": geom_yy.epsilon * (1 + fused_penalty),
+        "relative_epsilon": False,
     }
-    gw_kwds = {"threshold": 1e-3, "implicit_diff": ImplicitDiff(symmetric=True)}
-
-    # Compute FGW on yy, which will determine the relative epsilon.
-    problem = QuadraticProblem(geom_s_y, geom_s_y, geom_yy, a=b, b=b, **fused_kwds)
-    ott_solver = GromovWasserstein(**gw_kwds, epsilon=epsilon, relative_epsilon=True)
-    out_yy = ott_solver(problem)
 
     # Compute the FGW loss between point clouds x and y.
     problem = QuadraticProblem(geom_s_x, geom_s_y, geom_xy, a=a, b=b, **fused_kwds)
-    ott_solver = GromovWasserstein(**gw_kwds, epsilon=out_yy.geom.epsilon)
+    ott_solver = GromovWasserstein(**gw_kwds)
     ot_loss = ott_solver(problem).reg_gw_cost
 
     if debias:
         # Substracting 0.5 * FGW(x, x).
         problem = QuadraticProblem(geom_s_x, geom_s_x, geom_xx, a=a, b=a, **fused_kwds)
-        ott_solver = GromovWasserstein(**gw_kwds, epsilon=out_yy.geom.epsilon)
         ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
 
         # Substracting 0.5 * FGW(y, y).
-        ot_loss -= 0.5 * out_yy.reg_gw_cost
+        problem = QuadraticProblem(geom_s_y, geom_s_y, geom_yy, a=b, b=b, **fused_kwds)
+        ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
 
-    # Rescale to make losses more comparable across fused penalty.
-    return ot_loss / (1 + fused_penalty)
+    # Return the loss.
+    return ot_loss
 
 
 def loss_fn(
     params: optax.Params,
-    batch: Dict[str, jnp.ndarray],
+    batch: Dict[str, jax.Array],
     teacher_forcing: bool,
     quadratic: bool,
     proximal_step: ProximalStep,
     potential: nn.Module,
     n_steps: int,
     epsilon: float,
-    balancedness: float,
     debias: bool,
     fused_penalty: float,
-    tau_diff: jnp.ndarray,
-) -> jnp.ndarray:
+    tau_diff: jax.Array,
+) -> jax.Array:
     """The loss function
 
     Args:
@@ -170,7 +156,6 @@ def loss_fn(
         potential: The potential function parametrized by a neural network.
         n_steps: The number of steps to take.
         epsilon: Entropic regularization parameter.
-        balancedness: Between 0 and 1, 1 being balanced optimal transport.
         debias: Whether to debias the loss (see linear_loss or quadratic_loss).
         fused_penalty: Parameter indicting weight of the fused term.
         tau_diff: The difference in time between each timepoint, e.g. [1., 1., 2.].
@@ -201,7 +186,6 @@ def loss_fn(
                 space_y=_space[t + 1],  # ... and compare them to the next coordinates.
                 fused_penalty=fused_penalty,
                 epsilon=epsilon,
-                balancedness=balancedness,
                 debias=debias,
             )
         else:
@@ -211,7 +195,6 @@ def loss_fn(
                 y=_x[t + 1],
                 b=_a[t + 1],
                 epsilon=epsilon,
-                balancedness=balancedness,
                 debias=debias,
             )
 
