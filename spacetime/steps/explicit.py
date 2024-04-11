@@ -1,9 +1,8 @@
 from typing import Callable
 
 import flax.linen as nn
-import jax.numpy as jnp
-import optax
-from jax import grad, vmap
+from flax.core.scope import VariableDict
+from jax import grad, vmap, Array
 from .proximal_step import ProximalStep
 
 
@@ -13,22 +12,22 @@ class ExplicitStep(ProximalStep):
 
     def inference_step(
         self,
-        x: jnp.ndarray,
-        a: jnp.ndarray,
+        x: Array,
+        a: Array,
         potential_fun: Callable,
         tau: float,
-    ) -> jnp.ndarray:
+    ) -> Array:
         """Performs an explicit step on the input distribution and returns the
         updated distribution, given a potential function.
 
         Args:
-            x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            a (jnp.ndarray): The input histogram (batch_size,)
+            x (Array): The input distribution of size (batch_size, n_dims)
+            a (Array): The input histogram (batch_size,)
             potential_fun (Callable): A potential function.
             tau (float): The time step, which should be greater than 0.
 
         Returns:
-            jnp.ndarray: The updated distribution of size (batch_size, n_dims).
+            Array: The updated distribution of size (batch_size, n_dims).
         """
 
         # The explicit step is a step of gradient descent.
@@ -36,26 +35,26 @@ class ExplicitStep(ProximalStep):
 
     def training_step(
         self,
-        x: jnp.ndarray,
-        a: jnp.ndarray,
+        x: Array,
+        a: Array,
         potential_network: nn.Module,
-        potential_params: optax.Params,
+        potential_params: VariableDict,
         tau: float,
-    ) -> jnp.ndarray:
+    ) -> Array:
         """Performs an explicit step on the input distribution and returns the
         updated distribution. This function differs from the inference step in that it
         takes a potential network as input and returns the updated distribution.
 
         Args:
-            x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            a (jnp.ndarray): The input histogram (batch_size,)
+            x (Array): The input distribution of size (batch_size, n_dims)
+            a (Array): The input histogram (batch_size,)
             potential_network (nn.Module): A potential function parameterized by a
             neural network.
             potential_params (optax.Params): The parameters of the potential network.
             tau (float): The time step, which should be greater than 0.
 
         Returns:
-            jnp.ndarray: The updated distribution of size (batch_size, n_dims).
+            Array: The updated distribution of size (batch_size, n_dims).
         """
 
         # Turn the potential network into a function.
