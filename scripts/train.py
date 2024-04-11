@@ -23,8 +23,8 @@ def main(cfg: DictConfig) -> None:
         from spacetime import potentials, steps
 
         # Some shorthands.
-        space_obsm = cfg.organism.space_obsm
-        x_obsm = cfg.organism.obsm
+        space_key = cfg.organism.space_key
+        omics_key = cfg.organism.omics_key
 
         # Setup Weights & Biases.
         config = flatten(OmegaConf.to_container(cfg, resolve=True), reducer="dot")
@@ -45,8 +45,8 @@ def main(cfg: DictConfig) -> None:
         print("Loaded data.")
 
         # Select a given number of principal components then normalize the embedding.
-        adata.obsm[x_obsm] = adata.obsm[x_obsm][:, : cfg.n_pcs]
-        adata.obsm[x_obsm] /= adata.obsm[x_obsm].max()
+        adata.obsm[omics_key] = adata.obsm[omics_key][:, : cfg.n_pcs]
+        adata.obsm[omics_key] /= adata.obsm[omics_key].max()
         print("Normalized embedding.")
 
         # Keep only the training batches.
@@ -55,25 +55,17 @@ def main(cfg: DictConfig) -> None:
         print("Kept only training batches.")
 
         # Center and scale each timepoint in space.
-        timepoints = np.sort(np.unique(adata.obs[cfg.organism.time_obs]))
-        adata.obsm[space_obsm] = adata.obsm[space_obsm].astype(float)
+        timepoints = np.sort(np.unique(adata.obs[cfg.organism.time_key]))
+        adata.obsm[space_key] = adata.obsm[space_key].astype(float)
         for t in timepoints:
-            idx = adata.obs[cfg.organism.time_obs] == t
+            idx = adata.obs[cfg.organism.time_key] == t
 
-            mu = np.mean(adata.obsm[space_obsm][idx, :], axis=0)
-            adata.obsm[space_obsm][idx, :] -= mu
+            mu = np.mean(adata.obsm[space_key][idx, :], axis=0)
+            adata.obsm[space_key][idx, :] -= mu
 
-            sigma = np.std(adata.obsm[space_obsm][idx, :], axis=0)
-            adata.obsm[space_obsm][idx, :] /= sigma
+            sigma = np.std(adata.obsm[space_key][idx, :], axis=0)
+            adata.obsm[space_key][idx, :] /= sigma
         print("Centered and scaled space.")
-
-        # Make the space random if needed.
-        if cfg.random_space:
-            for t in timepoints:
-                idx = np.where(adata.obs[cfg.organism.time_obs] == t)[0]
-                rand_idx = np.random.permutation(idx)
-                adata.obsm[space_obsm][idx, :] = adata.obsm[space_obsm][rand_idx, :]
-            print("Randomized space.")
 
         # Intialize keyword arguments for the proximal step.
         step_kwargs = {}
@@ -120,15 +112,15 @@ def main(cfg: DictConfig) -> None:
             options=options,
         )
 
-        # scheduler = optax.constant_schedule(cfg.optimizer.learning_rate)
         scheduler = optax.cosine_decay_schedule(cfg.optimizer.learning_rate, 10_000)
 
         # Fit the model.
         my_model.fit(
             adata=adata,
-            time_obs=cfg.organism.time_obs,
-            x_obsm=x_obsm,
-            space_obsm=space_obsm,
+            time_key=cfg.organism.time_key,
+            omics_key=omics_key,
+            space_key=space_key,
+            weight_key=cfg.organism.weight_key,
             optimizer=optax.chain(
                 optax.adamw(scheduler),
                 optax.clip_by_global_norm(10.0),
