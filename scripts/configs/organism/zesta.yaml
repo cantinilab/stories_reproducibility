@@ -1,9 +1,9 @@
-dataset_path: "/pasteur/appa/scratch/ghuizing/zesta/zesta_processed.h5ad"
-space_obsm: "spatial"
-obsm: "X_pca_harmony"
-viz_obsm: "X_umap"
-annotation_obs: "layer_annotation"
-time_obs: "time"
+dataset_path: "/pasteur/zeus/projets/p02/ml4ig_hot/Users/ghuizing/data/zesta/zesta_processed.h5ad"
+omics_key: "X_pca_harmony"
+space_key: "spatial"
+weight_key: null
+annotation_key: "layer_annotation"
+time_key: "time"
 train_batches: ["3hpf slice 1","5hpf slice 10","10hpf slice 11","12hpf slice 8","18hpf slice 8"]
 early_test_batches: ["10hpf slice 17","12hpf slice 5"]
 late_test_batches: ["18hpf slice 9","24hpf slice 4"]

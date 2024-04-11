@@ -1,4 +1,3 @@
-random_space: false # Make the space random for ablation study
 checkpoint_path: "tmp" # Path to save the checkpoints
 n_pcs: 20 # Number of principal components to use
 
@@ -7,7 +6,7 @@ model:
   epsilon: 0.01 # The entropic regularization for the outer loss
   debias: true # Whether to use debiasing
   teacher_forcing: true # Whether to use teacher forcing
-  quadratic: false # If true, use FGW instead of Sinkhorn
+  quadratic: true # If true, use FGW instead of Sinkhorn
   fused: 5.0 # Fused penalty, used if quadratic=true
   seed: ??? # The random seed
 
@@ -27,7 +26,7 @@ optimizer:
   train_val_split: 0.75 # Proportion of train in the train/val split
   learning_rate: 0.01 # Learning rate of the optimizer
   checkpoint_interval: 1 # Try to save weights every x iter.
-  max_iter: 200_000 # Maximum number of iter
+  max_iter: 10_000 # Maximum number of iter
   batch_size: 1_000 # The batch size
   min_delta: 0.0 # The minimum delta for early stopping
   patience: 150

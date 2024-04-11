@@ -1,9 +1,9 @@
-dataset_path: "/pasteur/appa/scratch/ghuizing/artista/artista_processed.h5ad"
-space_obsm: "spatial"
-obsm: "X_pca_harmony"
-viz_obsm: "X_umap"
-annotation_obs: "Annotation"
-time_obs: "time"
-train_batches: [Injury_5DPI_rep1_SS200000147BL_D2,Injury_10DPI_rep1_SS200000147BL_B5,Injury_15DPI_rep4_FP200000266TR_E4,Injury_20DPI_rep2_SS200000147BL_B4]
+dataset_path: "/pasteur/zeus/projets/p02/ml4ig_hot/Users/ghuizing/data/artista/artista_processed.h5ad"
+omics_key: "X_pca_harmony"
+space_key: "spatial"
+weight_key: null
+annotation_key: "Annotation"
+time_key: "time"
+train_batches: [Injury_2DPI_rep1_SS200000147BL_D5,Injury_5DPI_rep1_SS200000147BL_D2,Injury_10DPI_rep1_SS200000147BL_B5,Injury_15DPI_rep4_FP200000266TR_E4,Injury_20DPI_rep2_SS200000147BL_B4]
 early_test_batches: [Injury_10DPI_rep2_SS200000147BL_B2,Injury_15DPI_C_rep1_FP200000266TR_E6]
 late_test_batches: [Injury_20DPI_rep3_SS200000147BL_B5,Injury_30DPI_rep2_FP200000264BL_A6]
