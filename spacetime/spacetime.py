@@ -23,47 +23,59 @@ from .loss import loss_fn
 
 @dataclass
 class SpaceTime:
-    """Multi-modal Wasserstein gradient flow model for spatio-temporal omics data."""
+    """Multi-modal Wasserstein gradient flow model for spatio-temporal omics data.
+
+    Args:
+        potential (nn.Module, optional): The potential function. Defaults to a MLP.
+        proximal_step (ProximalStep, optional): The proximal step. Defaults forward Euler
+        n_steps (int, optional): The number of steps. Defaults to 1.
+        teacher_forcing (bool, optional): Use teacher forcing. Defaults to True.
+        quadratic (bool, optional): Use a Fused GW loss. Defaults to True.
+        debias (bool, optional): Whether to debias the loss. Defaults to True.
+        epsilon (float, optional): The (relative) entropic reg. Defaults to 0.01.
+        log_callback (Callable, optional): The callback for logging. Defaults to None.
+        fused_penalty (float, optional): Weight of the linear term. Defaults to 5.0.
+    """
 
     potential: nn.Module = MLPPotential()
     proximal_step: ProximalStep = ExplicitStep()
     n_steps: int = 1
     teacher_forcing: bool = True
-    quadratic: bool = False
+    quadratic: bool = True
     debias: bool = True
-    epsilon: float = 0.05
-    balancedness: float = 1.0
-    log_callback: Callable = None
+    epsilon: float = 0.01
+    log_callback: Callable | None = None
     fused_penalty: float = 5.0
 
     def fit(
         self,
         adata: AnnData,
-        time_obs: str,
-        x_obsm: str,
-        space_obsm: str,
+        time_key: str,
+        omics_key: str,
+        space_key: str,
+        weight_key: str | None = None,
         optimizer: GradientTransformation = optax.adamw(1e-2),
         max_iter: int = 10_000,
-        batch_size: int = 250,
-        train_val_split: float = 0.8,
-        min_delta: float = 1e-4,
-        patience: float = 25,
-        checkpoint_manager: CheckpointManager = None,
+        batch_size: int = 1_000,
+        train_val_split: float = 0.75,
+        min_delta: float = 0.0,
+        patience: int = 150,
+        checkpoint_manager: CheckpointManager | None = None,
         key: KeyArray = PRNGKey(0),
     ) -> None:
         """Fit the model.
 
         Args:
             adata (AnnData): The AnnData object.
-            time_obs (str): The name of the time observation.
-            x_obsm (str): The name of the obsm field containing cell coordinates.
-            space_obsm (str): The name of the obsm field containing space coordinates.
+            time_key (str): The name of the time observation.
+            omics_key (str): The name of the obsm field containing cell coordinates.
+            space_key (str): The name of the obsm field containing space coordinates.
             optimizer (GradientTransformation, optional): The optimizer.
             max_iter (int, optional): The max number of iterations. Defaults to 10_000.
             batch_size (int, optional): The batch size. Defaults to 250.
             train_val_split (float, optional): The proportion of train in the split.
             min_delta (float, optional): The minimum delta for early stopping.
-            patience (float, optional): The patience for early stopping.
+            patience (int, optional): The patience for early stopping.
             checkpoint_manager (CheckpointManager, optional): The checkpoint manager.
             key (KeyArray, optional): The random key. Defaults to PRNGKey(0).
         """
@@ -75,9 +87,10 @@ class SpaceTime:
         # Create a data loader for the AnnData object.
         dataloader = DataLoader(
             adata,
-            time_obs=time_obs,
-            x_obsm=x_obsm,
-            space_obsm=space_obsm,
+            time_key=time_key,
+            omics_key=omics_key,
+            space_key=space_key,
+            weight_key=weight_key,
             batch_size=batch_size,
             train_val_split=train_val_split,
         )
@@ -91,10 +104,9 @@ class SpaceTime:
 
         # Define some arguments shared by the train and validation loss.
         lkwargs = {"teacher_forcing": self.teacher_forcing, "potential": self.potential}
-        lkwargs = {**lkwargs, "balancedness": self.balancedness, "tau_diff": tau_diff}
+        lkwargs = {**lkwargs, "tau_diff": tau_diff, "fused_penalty": self.fused_penalty}
         lkwargs = {**lkwargs, "quadratic": self.quadratic, "debias": self.debias}
         lkwargs = {**lkwargs, "n_steps": self.n_steps, "epsilon": self.epsilon}
-        lkwargs = {**lkwargs, "fused_penalty": self.fused_penalty}
         lkwargs = {**lkwargs, "proximal_step": self.proximal_step}
 
         @jax.jit
@@ -173,16 +185,16 @@ class SpaceTime:
     def transform(
         self,
         adata: AnnData,
-        x_obsm: str,
+        omics_key: str,
         tau: float,
-        batch_size: int = 250,
+        batch_size: int = 1_000,
         key: KeyArray = PRNGKey(0),
     ) -> np.ndarray:
         """Transform an AnnData object.
 
         Args:
             adata (AnnData): The AnnData object to transform.
-            x_obsm (str): The obsm field containing the data to transform.
+            omics_key (str): The obsm field containing the data to transform.
             tau (float, optional): The time step.
             batch_size (int, optional): The batch size. Defaults to 250.
             key (KeyArray, optional): The random key. Defaults to PRNGKey(0).
@@ -196,14 +208,14 @@ class SpaceTime:
 
         # Helper function to transform a batch.
         def _transform_batch(idx_batch):
-            x = jnp.array(adata.obsm[x_obsm][idx_batch])
+            x = jnp.array(adata.obsm[omics_key][idx_batch])
             a = jnp.ones(len(idx_batch)) / len(idx_batch)
             return self.proximal_step.chained_inference_steps(
                 x, a, potential_fun, tau, self.n_steps
             )
 
         # Initizalize the prediction.
-        x_pred = np.zeros(adata.obsm[x_obsm].shape)
+        x_pred = np.zeros(adata.obsm[omics_key].shape)
 
         # Iterate over batches and store the predictions.
         idx = np.array(jax.random.permutation(key, jnp.arange(x_pred.shape[0])))
