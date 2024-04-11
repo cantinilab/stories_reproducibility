@@ -1,17 +1,16 @@
 from typing import Sequence
 
 import flax.linen as nn
-from flax.linen.activation import softplus
+from jax._src.nn.functions import gelu
 from flax.linen.initializers import he_uniform, zeros_init
 
 
 class MLPPotential(nn.Module):
     """
     This class defines a simple multi-layer perceptron (MLP) potential which takes a
-    batch of cells and returns a batch of scalars. The activation function is a softplus
+    batch of cells and returns a batch of scalars. The activation function is a gelu
     function, which is a smooth approximation to the rectified linear unit (ReLU). This
-    makes the gradient of the potential twice differentiable wrt input. We recommend
-    trying gelu as an activation function as well.
+    makes the gradient of the potential twice differentiable wrt input.
 
     Args:
         features: A sequence of integers specifying the number of hidden units in each
@@ -21,8 +20,8 @@ class MLPPotential(nn.Module):
 
     """
 
-    features: Sequence[int] = (32, 32)  # Default to two hidden layers
-    activation: callable = softplus  # Default to softplus activation
+    features: Sequence[int] = [128, 128]  # Default to two hidden layers
+    activation: callable = gelu  # Default to gelu activation
 
     @nn.compact
     def __call__(self, x):
