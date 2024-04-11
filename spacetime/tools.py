@@ -4,49 +4,51 @@ from anndata import AnnData
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.random import KeyArray
 from dataclasses import dataclass
+import logging
 
 
 @dataclass
 class DataLoader:
     """DataLoader feeds data from an AnnData object to the model as JAX arrays. It
-    samples with replacement for a given batch size.
+    samples without replacement for a given batch size.
 
     Args:
         adata (AnnData): The input AnnData object.
-        time_obs (str): The obs field with float time observations
-        x_obsm (str): The obsm field with the omics coordinates.
-        space_obsm (str): The obsm field with the spatial coordinates.
+        time_key (str): The obs field with float time observations
+        omics_key (str): The obsm field with the omics coordinates.
+        space_key (str): The obsm field with the spatial coordinates.
         batch_size (int): The batch size.
         train_val_split (float, optional): The proportion of train in the split.
+        weight_key (str, optional): The obs field with the marginal weights.
     """
 
     adata: AnnData
-    time_obs: str
-    x_obsm: str
-    space_obsm: str
+    time_key: str
+    omics_key: str
+    space_key: str
     batch_size: int
     train_val_split: float
+    weight_key: str | None = None
 
     def __post_init__(self) -> None:
         """Initialize the DataLoader."""
 
         # Check that we have a valid time observation.
         assert_msg = "Time observations must be numeric."
-        assert self.adata.obs[self.time_obs].dtype.kind in "biuf", assert_msg
+        assert self.adata.obs[self.time_key].dtype.kind in "biuf", assert_msg
 
         # If time is valid, then we can get hold of the timepoints and their indices.
-        self.timepoints = np.sort(np.unique(self.adata.obs[self.time_obs]))
-        get_idx = lambda t: np.where(self.adata.obs[self.time_obs] == t)[0]
+        self.timepoints = np.sort(np.unique(self.adata.obs[self.time_key]))
+        get_idx = lambda t: np.where(self.adata.obs[self.time_key] == t)[0]
         self.idx = [get_idx(t) for t in self.timepoints]
 
         # Get the number of features, spatial dimensions, and timepoints.
-        self.n_features = self.adata.obsm[self.x_obsm].shape[1]
-        # self.n_space = self.adata.obsm[self.space_obsm].shape[1]
+        self.n_features = self.adata.obsm[self.omics_key].shape[1]
+        self.n_space = self.adata.obsm[self.space_key].shape[1]
         self.n_timepoints = len(self.timepoints)
 
-    def make_train_val_split(self, key: KeyArray) -> None:
+    def make_train_val_split(self, key: jax.random.KeyArray) -> None:
         """Make a train/validation split. Must be called before training.
 
         Args:
@@ -67,16 +69,19 @@ class DataLoader:
             self.idx_train.append(permuted_idx[:split])
             self.idx_val.append(permuted_idx[split:])
 
-        # Print some stats about the split.
-        print("Train (# cells): ", [len(idx) for idx in self.idx_train])
-        print("Val (# cells): ", [len(idx) for idx in self.idx_val])
+        # Log some stats about the split.
+        logging.info(f"Train (# cells): {[len(idx) for idx in self.idx_train]}")
+        logging.info(f"Val (# cells): {[len(idx) for idx in self.idx_val]}")
 
-    def next(self, key: KeyArray, train_or_val: str) -> Dict[str, jnp.ndarray]:
+    def next(self, key: jax.random.KeyArray, train_or_val: str) -> Dict[str, jax.Array]:
         """Get the next batch from either train or val indices.
 
-        Returns:
-            Dict[str, jnp.ndarray]: A dictionary of JAX arrays.
+        Args:
+            key (jax.random.KeyArray): The random number generator key for sampling.
             train_or_val (str): Either "train" or "val".
+
+        Returns:
+            Dict[str, jax.Array]: A dictionary of JAX arrays.
         """
 
         # Check that we have a valid train or val argument.
@@ -96,7 +101,13 @@ class DataLoader:
             if self.batch_size <= len_t:
                 shape = (self.batch_size,)
                 batch_idx = jax.random.choice(key_choice, idx_t, shape, replace=False)
-                batch_a = np.ones(shape[0]) / shape[0]  # Weights are uniform.
+
+                if self.weight_key:
+                    batch_a = self.adata.obs[self.weight_key].iloc[batch_idx].values
+                    batch_a /= batch_a.sum()
+                else:
+                    batch_a = np.ones(shape[0])
+                    batch_a /= batch_a.sum()  # Weights are uniform.
 
             # if the batch size is greater than the number of cells n, then we want
             # to pad the cells with random cells and pad a with zeroes.
@@ -104,17 +115,32 @@ class DataLoader:
                 shape = (self.batch_size - len_t,)
                 batch_idx = jax.random.choice(key_choice, idx_t, shape, replace=True)
                 batch_idx = np.concatenate((idx_t, batch_idx))
-                batch_a = np.concatenate((np.ones(len_t), np.zeros(shape[0]))) / len_t
+
+                if self.weight_key:
+                    batch_a = self.adata.obs[self.weight_key].iloc[idx_t].values
+                    batch_a = np.concatenate((batch_a, np.zeros(shape[0])))
+                    batch_a /= batch_a.sum()
+                else:
+                    batch_a = np.concatenate((np.ones(len_t), np.zeros(shape[0])))
+                    batch_a /= batch_a.sum()  # Weights are uniform.
 
             # Get the omics and spatial coordinates for the batch.
-            x.append(self.adata.obsm[self.x_obsm][batch_idx])
+            x.append(self.adata.obsm[self.omics_key][batch_idx])
+            space.append(self.adata.obsm[self.space_key][batch_idx])
             a.append(batch_a)
-            space.append(self.adata.obsm[self.space_obsm][batch_idx])
 
         # Return a dictionary of JAX arrays, the first axis being time.
         jnp_stack = lambda x: jnp.array(np.stack(x))
         return {"x": jnp_stack(x), "space": jnp_stack(space), "a": jnp_stack(a)}
 
-    def train_or_val(self, key: KeyArray) -> bool:
+    def train_or_val(self, key: jax.random.KeyArray) -> bool:
+        """Sample whether to train or validate.
+
+        Args:
+            key (jax.random.KeyArray): The random number generator key for sampling.
+
+        Returns:
+            bool: True for train, False for val.
+        """
         p = jnp.array([self.train_val_split, 1 - self.train_val_split])
         return jax.random.choice(key, jnp.array([True, False]), p=p)
