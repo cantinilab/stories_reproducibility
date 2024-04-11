@@ -30,7 +30,7 @@ class ICNNImplicitStep(ProximalStep):
         self,
         maxiter: int = 100,
         implicit_diff: bool = True,
-        log_callback: Callable = None,
+        log_callback: Callable | None = None,
         tol: float = 1e-8,
     ):
         self.log_callback = log_callback
@@ -46,23 +46,23 @@ class ICNNImplicitStep(ProximalStep):
 
     def inference_step(
         self,
-        x: jnp.ndarray,
-        a: jnp.ndarray,
+        x: jax.Array,
+        a: jax.Array,
         potential_fun: Callable,
         tau: float,
-    ) -> jnp.ndarray:
+    ) -> jax.Array:
         """Performs an implicit step on the input distribution and returns the
         updated distribution, given a potential function. If logging is available,
         logs the proximal cost.
 
         Args:
-            x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            a (jnp.ndarray): The input histogram (batch_size,)
+            x (jax.Array): The input distribution of size (batch_size, n_dims)
+            a (jax.Array): The input histogram (batch_size,)
             potential_fun (Callable): A potential function.
             tau (float): The time step, which should be greater than 0.
 
         Returns:
-            jnp.ndarray: The updated distribution of size (batch_size, n_dims).
+            jax.Array: The updated distribution of size (batch_size, n_dims).
         """
 
         icnn = ICNN(dim_data=x.shape[1], dim_hidden=[32, 32, 32])
@@ -102,27 +102,27 @@ class ICNNImplicitStep(ProximalStep):
 
     def training_step(
         self,
-        x: jnp.ndarray,
-        a: jnp.ndarray,
+        x: jax.Array,
+        a: jax.Array,
         potential_network: nn.Module,
         potential_params: optax.Params,
         tau: float,
-    ) -> jnp.ndarray:
+    ) -> jax.Array:
         """Performs an implicit step on the input distribution and returns the
         updated distribution. This function differs from the inference step in that it
         takes a potential network as input and returns the updated distribution. Logging
         is not available in this function because it rpevents implicit differentiation.
 
         Args:
-            x (jnp.ndarray): The input distribution of size (batch_size, n_dims)
-            a (jnp.ndarray): The input histogram (batch_size,)
+            x (jax.Array): The input distribution of size (batch_size, n_dims)
+            a (jax.Array): The input histogram (batch_size,)
             potential_network (nn.Module): A potential function parameterized by a
             neural network.
             potential_params (optax.Params): The parameters of the potential network.
             tau (float): The time step, which should be greater than 0.
 
         Returns:
-            jnp.ndarray: The updated distribution of size (batch_size, n_dims).
+            jax.Array: The updated distribution of size (batch_size, n_dims).
         """
 
         icnn = ICNN(dim_data=x.shape[1], dim_hidden=[32, 32, 32])
