@@ -37,7 +37,7 @@ def linear_loss(
     # Define geometries, compute epsilon relative to the yy geometry.
     # For Sinkhorn, epsilon is defined in the Geometry.
     # For FGW, it is defined in the solver.
-    geom_yy = PointCloud(y, y, epsilon=epsilon, relative_epsilon=True)
+    geom_yy = PointCloud(y, y, epsilon=epsilon)
     geom_xx = PointCloud(x, x).copy_epsilon(geom_yy)
     geom_xy = PointCloud(x, y).copy_epsilon(geom_yy)
 
@@ -53,10 +53,12 @@ def linear_loss(
     if debias:
         # Debias the Sinkhorn loss with the xx term.
         problem = LinearProblem(geom_xx, a=a, b=a)
+        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
         # Debias the Sinkhorn loss with the yy term.
         problem = LinearProblem(geom_yy, a=b, b=b)
+        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
     return ot_loss
@@ -100,17 +102,17 @@ def quadratic_loss(
     # Define geometries on space for xx, yy, and on genes for xy, xx and yy.
     # For Sinkhorn, epsilon is defined in the Geometry.
     # For FGW, it is defined in the solver.
-    geom_yy = PointCloud(y, epsilon=epsilon, relative_epsilon=True)
-    geom_s_x = PointCloud(space_x).copy_epsilon(geom_yy)
-    geom_s_y = PointCloud(space_y).copy_epsilon(geom_yy)
-    geom_xy = PointCloud(x, y).copy_epsilon(geom_yy)
-    geom_xx = PointCloud(x).copy_epsilon(geom_yy)
+    geom_s_x = PointCloud(space_x)
+    geom_s_y = PointCloud(space_y)
+    geom_xy = PointCloud(x, y)
+    geom_xx = PointCloud(x)
+    geom_yy = PointCloud(y)
 
     # These keyword arguments are passed to all quadratic problems.
     fused_kwds = {"fused_penalty": fused_penalty}
     gw_kwds = {
         "implicit_diff": ImplicitDiff(symmetric=True),
-        "epsilon": geom_yy.epsilon * (1 + fused_penalty),
+        "epsilon": epsilon * (1 + fused_penalty),
         "relative_epsilon": False,
     }
 
@@ -122,14 +124,16 @@ def quadratic_loss(
     if debias:
         # Substracting 0.5 * FGW(x, x).
         problem = QuadraticProblem(geom_s_x, geom_s_x, geom_xx, a=a, b=a, **fused_kwds)
+        ott_solver = GromovWasserstein(**gw_kwds)
         ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
 
         # Substracting 0.5 * FGW(y, y).
         problem = QuadraticProblem(geom_s_y, geom_s_y, geom_yy, a=b, b=b, **fused_kwds)
+        ott_solver = GromovWasserstein(**gw_kwds)
         ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
 
     # Return the loss.
-    return ot_loss
+    return ot_loss / (1 + fused_penalty)
 
 
 def loss_fn(

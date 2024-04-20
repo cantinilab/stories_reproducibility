@@ -9,7 +9,8 @@ import numpy as np
 import optax
 from flax.training import orbax_utils
 from flax.training.early_stopping import EarlyStopping
-from jax.random import KeyArray, PRNGKey
+from jax.random import PRNGKey
+from jax._src.random import KeyArray
 from optax import GradientTransformation
 from orbax.checkpoint import CheckpointManager
 from tqdm import tqdm
@@ -43,7 +44,7 @@ class SpaceTime:
     teacher_forcing: bool = True
     quadratic: bool = True
     debias: bool = True
-    epsilon: float = 0.01
+    epsilon: float = 0.05
     log_callback: Callable | None = None
     fused_penalty: float = 5.0
 
@@ -135,8 +136,8 @@ class SpaceTime:
         pbar = tqdm(range(1, max_iter + 1))
         for it in pbar:
             # Randomly choose whether to train or validate, weighted by train-val split.
-            is_train_key, batch_key, key = jax.random.split(key, num=3)
-            is_train = dataloader.train_or_val(is_train_key)
+            batch_key, key = jax.random.split(key, num=2)
+            is_train = dataloader.train_or_val(it)
 
             # If train, update the parameters. If val, just compute the loss.
             if is_train:

@@ -2,6 +2,7 @@ from typing import Dict
 
 from anndata import AnnData
 import jax
+from jax._src.random import KeyArray
 import jax.numpy as jnp
 import numpy as np
 from dataclasses import dataclass
@@ -48,7 +49,7 @@ class DataLoader:
         self.n_space = self.adata.obsm[self.space_key].shape[1]
         self.n_timepoints = len(self.timepoints)
 
-    def make_train_val_split(self, key: jax.random.KeyArray) -> None:
+    def make_train_val_split(self, key: KeyArray) -> None:
         """Make a train/validation split. Must be called before training.
 
         Args:
@@ -73,11 +74,11 @@ class DataLoader:
         logging.info(f"Train (# cells): {[len(idx) for idx in self.idx_train]}")
         logging.info(f"Val (# cells): {[len(idx) for idx in self.idx_val]}")
 
-    def next(self, key: jax.random.KeyArray, train_or_val: str) -> Dict[str, jax.Array]:
+    def next(self, key: KeyArray, train_or_val: str) -> Dict[str, jax.Array]:
         """Get the next batch from either train or val indices.
 
         Args:
-            key (jax.random.KeyArray): The random number generator key for sampling.
+            key (KeyArray): The random number generator key for sampling.
             train_or_val (str): Either "train" or "val".
 
         Returns:
@@ -133,14 +134,14 @@ class DataLoader:
         jnp_stack = lambda x: jnp.array(np.stack(x))
         return {"x": jnp_stack(x), "space": jnp_stack(space), "a": jnp_stack(a)}
 
-    def train_or_val(self, key: jax.random.KeyArray) -> bool:
+    def train_or_val(self, iteration: int) -> bool:
         """Sample whether to train or validate.
 
         Args:
-            key (jax.random.KeyArray): The random number generator key for sampling.
+            iteration (int): The current iteration.
 
         Returns:
             bool: True for train, False for val.
         """
-        p = jnp.array([self.train_val_split, 1 - self.train_val_split])
-        return jax.random.choice(key, jnp.array([True, False]), p=p)
+        freq_val = 1 - self.train_val_split
+        return iteration % int(1 / freq_val) != 0

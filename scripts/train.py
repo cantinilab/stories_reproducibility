@@ -121,10 +121,7 @@ def main(cfg: DictConfig) -> None:
             omics_key=omics_key,
             space_key=space_key,
             weight_key=cfg.organism.weight_key,
-            optimizer=optax.chain(
-                optax.adamw(scheduler),
-                optax.clip_by_global_norm(10.0),
-            ),
+            optimizer=optax.adamw(scheduler),
             max_iter=cfg.optimizer.max_iter,
             batch_size=cfg.optimizer.batch_size,
             train_val_split=cfg.optimizer.train_val_split,

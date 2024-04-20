@@ -20,7 +20,7 @@ class MLPPotential(nn.Module):
 
     """
 
-    features: Sequence[int] = [128, 128]  # Default to two hidden layers
+    features: Sequence[int] = (128, 128)  # Default to two hidden layers
     activation: callable = gelu  # Default to gelu activation
 
     @nn.compact
