@@ -6,7 +6,7 @@ import jax
 def chamfer_distance(
     x_real: jax.Array,
     x_pred: jax.Array,
-) -> float:
+) -> jax.Array:
     """Compute the Chamfer distance between two point clouds.
 
     Args:
@@ -14,7 +14,7 @@ def chamfer_distance(
         x_pred (jax.Array): The predicted distribution.
 
     Returns:
-        float: The Chamfer distance.
+        jax.Array: The Chamfer distance.
     """
 
     # Compute the distance matrix.
@@ -23,14 +23,14 @@ def chamfer_distance(
     # Compute the Chamfer distance.
     left_mean = jnp.mean(jnp.min(dist_matrix, axis=0))
     right_mean = jnp.mean(jnp.min(dist_matrix, axis=1))
-    return float(left_mean + right_mean)
+    return jnp.array(left_mean + right_mean, float)
 
 
 @jax.jit
 def hausdorff_distance(
     x_real: jax.Array,
     x_pred: jax.Array,
-) -> float:
+) -> jax.Array:
     """Compute the Hausdorff distance between two point clouds.
 
     Args:
@@ -38,7 +38,7 @@ def hausdorff_distance(
         x_pred (jax.Array): The predicted distribution.
 
     Returns:
-        float: The Hausdorff distance.
+        jax.Array: The Hausdorff distance.
     """
 
     # Compute the distance matrix.
@@ -47,4 +47,4 @@ def hausdorff_distance(
     # Compute the Hausdorff distance.
     left_max = jnp.max(jnp.min(dist_matrix, axis=0))
     right_max = jnp.max(jnp.min(dist_matrix, axis=1))
-    return float(left_max + right_max)
+    return jnp.array(left_max + right_max, float)

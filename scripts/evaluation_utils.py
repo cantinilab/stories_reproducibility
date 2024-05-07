@@ -34,7 +34,7 @@ def pred(
     idx_batches: np.ndarray,
     time_obs: str,
     my_model: spacetime.SpaceTime,
-    x_obsm: str,
+    omics_key: str,
 ):
     """Transform the data given a subet of batches."""
 
@@ -46,7 +46,7 @@ def pred(
     for i, t in enumerate(timepoints[:-1]):
         idx = (adata.obs[time_obs] == t) & idx_batches
         adata.obsm["pred"][idx] = my_model.transform(
-            adata[idx], x_obsm=x_obsm, batch_size=500, tau=t_diff[i]
+            adata[idx], omics_key=omics_key, batch_size=500, tau=t_diff[i]
         )
 
 
@@ -54,8 +54,8 @@ def plot_plan(
     adata: ad.AnnData,
     idx_last: np.ndarray,
     idx_true_last: np.ndarray,
-    space_obsm: str,
-    annotation_obs: str,
+    space_key: str,
+    annotation_key: str,
     timepoints_last: np.ndarray,
     out_last: Union[SinkhornOutput, GWOutput, LRGWOutput],
     random_j: np.ndarray,
@@ -68,9 +68,9 @@ def plot_plan(
     # Plot the last prediction as a scatterplot, colored by annotation.
     dot_size = 5e3 / adata[idx_last].n_obs
     sns.scatterplot(
-        x=adata.obsm[space_obsm][idx_last, 0],
-        y=adata.obsm[space_obsm][idx_last, 1],
-        hue=adata[idx_last].obs[annotation_obs],
+        x=adata.obsm[space_key][idx_last, 0],
+        y=adata.obsm[space_key][idx_last, 1],
+        hue=adata[idx_last].obs[annotation_key],
         ax=axes[0],
         s=dot_size,
     )
@@ -83,9 +83,9 @@ def plot_plan(
     # Plot the last ground-truth as a scatterplot, colored by annotation.
     dot_size = 5e3 / adata[idx_true_last].n_obs
     sns.scatterplot(
-        x=adata.obsm[space_obsm][idx_true_last, 0],
-        y=adata.obsm[space_obsm][idx_true_last, 1],
-        hue=adata[idx_true_last].obs[annotation_obs],
+        x=adata.obsm[space_key][idx_true_last, 0],
+        y=adata.obsm[space_key][idx_true_last, 1],
+        hue=adata[idx_true_last].obs[annotation_key],
         ax=axes[1],
         s=dot_size,
     )
@@ -109,12 +109,12 @@ def plot_plan(
         for k in np.argpartition(push, -5)[-5:]:
 
             # Coordinates in the first plot.
-            xA = adata[idx_last].obsm[space_obsm][j, 0]
-            yA = adata[idx_last].obsm[space_obsm][j, 1]
+            xA = adata[idx_last].obsm[space_key][j, 0]
+            yA = adata[idx_last].obsm[space_key][j, 1]
 
             # Coordinates in the second plot.
-            xB = adata.obsm[space_obsm][np.where(idx_true_last)[0][k], 0]
-            yB = adata.obsm[space_obsm][np.where(idx_true_last)[0][k], 1]
+            xB = adata.obsm[space_key][np.where(idx_true_last)[0][k], 0]
+            yB = adata.obsm[space_key][np.where(idx_true_last)[0][k], 1]
 
             # Create the connection.
             con = ConnectionPatch(
@@ -134,8 +134,8 @@ def plot_plan(
 
 def load_data(
     dataset_path: str,
-    x_obsm: str,
-    space_obsm: str,
+    omics_key: str,
+    space_key: str,
     n_pcs: int,
 ):
     """Load the data and preprocess it."""
@@ -144,21 +144,21 @@ def load_data(
     adata = ad.read_h5ad(dataset_path)
 
     # Normalize the obsm.
-    adata.obsm[x_obsm] = adata.obsm[x_obsm][:, :n_pcs]
-    adata.obsm[x_obsm] /= adata.obsm[x_obsm].max()
+    adata.obsm[omics_key] = adata.obsm[omics_key][:, :n_pcs]
+    adata.obsm[omics_key] /= adata.obsm[omics_key].max()
 
     # Center and scale each timepoint in space.
-    adata.obsm[space_obsm] = adata.obsm[space_obsm].astype(float)
+    adata.obsm[space_key] = adata.obsm[space_key].astype(float)
     for b in adata.obs["Batch"].unique():
         idx = adata.obs["Batch"] == b
 
         # Center
-        mu = np.mean(adata.obsm[space_obsm][idx, :], axis=0)
-        adata.obsm[space_obsm][idx, :] -= mu
+        mu = np.mean(adata.obsm[space_key][idx, :], axis=0)
+        adata.obsm[space_key][idx, :] -= mu
 
         # Scale
-        sigma = np.std(adata.obsm[space_obsm][idx, :], axis=0)
-        adata.obsm[space_obsm][idx, :] /= sigma
+        sigma = np.std(adata.obsm[space_key][idx, :], axis=0)
+        adata.obsm[space_key][idx, :] /= sigma
 
     return adata
 
@@ -221,7 +221,7 @@ def define_model(
     )
 
     # Restore the model.
-    best_epoch = checkpoint_manager.best_step()
-    my_model.params = checkpoint_manager.restore(best_epoch)
+    best_step = checkpoint_manager.best_step()
+    my_model.params = checkpoint_manager.restore(best_step)
 
     return my_model

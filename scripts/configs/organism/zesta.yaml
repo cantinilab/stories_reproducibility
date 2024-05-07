@@ -6,4 +6,4 @@ annotation_key: "layer_annotation"
 time_key: "time"
 train_batches: ["3hpf slice 1","5hpf slice 10","10hpf slice 11","12hpf slice 8","18hpf slice 8"]
 early_test_batches: ["10hpf slice 17","12hpf slice 5"]
-late_test_batches: ["18hpf slice 9","24hpf slice 4"]
+late_test_batches: ["18hpf slice 11","24hpf slice 4"]

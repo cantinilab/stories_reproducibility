@@ -1,7 +1,6 @@
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import traceback
-import sys
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="evaluate")
@@ -17,7 +16,9 @@ def main(cfg: DictConfig) -> None:
         # Add scripts to the path.
         import sys
 
-        sys.path.append("/pasteur/appa/homes/ghuizing/space-time/scripts")
+        sys.path.append(
+            "/pasteur/zeus/projets/p02/ml4ig_hot/Users/ghuizing/space-time/scripts"
+        )
 
         from evaluation_utils import pred, load_data, define_model, plot_plan
         from evaluation_scores import sinkhorn, chamfer, hausdorff, fgw
@@ -36,10 +37,10 @@ def main(cfg: DictConfig) -> None:
         print(config, f"JAX device type: {jax.devices()[0].device_kind}")
 
         # Get some parameters.
-        x_obsm = eval_cfg.organism.obsm
-        space_obsm = eval_cfg.organism.space_obsm
-        time_obs = eval_cfg.organism.time_obs
-        annotation_obs = eval_cfg.organism.annotation_obs
+        omics_key = eval_cfg.organism.omics_key
+        space_key = eval_cfg.organism.space_key
+        time_key = eval_cfg.organism.time_key
+        annotation_key = eval_cfg.organism.annotation_key
         train_batches = eval_cfg.organism.train_batches
         early_test_batches = eval_cfg.organism.early_test_batches
         late_test_batches = eval_cfg.organism.late_test_batches
@@ -49,8 +50,8 @@ def main(cfg: DictConfig) -> None:
         # Load the data.
         adata = load_data(
             dataset_path=eval_cfg.organism.dataset_path,
-            x_obsm=x_obsm,
-            space_obsm=space_obsm,
+            omics_key=omics_key,
+            space_key=space_key,
             n_pcs=eval_cfg.n_pcs,
         )
 
@@ -77,31 +78,31 @@ def main(cfg: DictConfig) -> None:
         ################################# Transform the data #############################
 
         # Initialize the prediction.
-        adata.obsm["pred"] = adata.obsm[x_obsm].copy()
-        adata.obs[time_obs] = adata.obs[time_obs].astype(float)
+        adata.obsm["pred"] = adata.obsm[omics_key].copy()
+        adata.obs[time_key] = adata.obs[time_key].astype(float)
 
         # Transform the data on training batches, early and late test batches.
-        pred(adata, idx_train, time_obs, my_model, x_obsm)
-        pred(adata, idx_early_test, time_obs, my_model, x_obsm)
-        pred(adata, idx_late_test, time_obs, my_model, x_obsm)
+        pred(adata, idx_train, time_key, my_model, omics_key)
+        pred(adata, idx_early_test, time_key, my_model, omics_key)
+        pred(adata, idx_late_test, time_key, my_model, omics_key)
 
         ############################ Compute the Sinkhorn distance #######################
 
         # Compute the Sinkhorn distance for each timepoint on the training set.
         score_name = "sinkhorn_train"
-        stats, _ = sinkhorn(adata, idx_train, score_name, time_obs, x_obsm)
+        stats, _ = sinkhorn(adata, idx_train, score_name, time_key, omics_key)
         wandb.log(stats)
         scores_dict[score_name] = stats
 
         # Compute the Sinkhorn distance for each timepoint on the early test set.
         score_name = "sinkhorn_early_test"
-        stats, _ = sinkhorn(adata, idx_early_test, score_name, time_obs, x_obsm)
+        stats, _ = sinkhorn(adata, idx_early_test, score_name, time_key, omics_key)
         wandb.log(stats)
         scores_dict[score_name] = stats
 
         # Compute the Sinkhorn distance for each timepoint on the late test set.
         score_name = "sinkhorn_late_test"
-        stats, res = sinkhorn(adata, idx_late_test, score_name, time_obs, x_obsm)
+        stats, res = sinkhorn(adata, idx_late_test, score_name, time_key, omics_key)
         idx_last, idx_true_last, out_last, timepoints_last = res  # Keep for plot.
         wandb.log(stats)
         scores_dict[score_name] = stats
@@ -115,8 +116,8 @@ def main(cfg: DictConfig) -> None:
         # Keyword arguments for the plot.
         plot_kwds = {
             "adata": adata,
-            "space_obsm": space_obsm,
-            "annotation_obs": annotation_obs,
+            "space_key": space_key,
+            "annotation_key": annotation_key,
             "random_j": random_j,
         }
 
@@ -138,36 +139,38 @@ def main(cfg: DictConfig) -> None:
 
         # Compute the Hausdorff distance for each timepoint on the training set.
         score_name = "hausdorff_train"
-        stats = hausdorff(adata, idx_train, score_name, time_obs, x_obsm)
+        stats = hausdorff(adata, idx_train, score_name, time_key, omics_key)
         wandb.log(stats)
         scores_dict[score_name] = stats
 
         # Compute the Hausdorff distance for each timepoint on the early test set.
         score_name = "hausdorff_early_test"
-        stats = hausdorff(adata, idx_early_test, score_name, time_obs, x_obsm)
+        stats = hausdorff(adata, idx_early_test, score_name, time_key, omics_key)
         wandb.log(stats)
         scores_dict[score_name] = stats
 
         # Compute the Hausdorff distance for each timepoint on the late test set.
         score_name = "hausdorff_late_test"
-        stats = hausdorff(adata, idx_late_test, score_name, time_obs, x_obsm)
+        stats = hausdorff(adata, idx_late_test, score_name, time_key, omics_key)
         wandb.log(stats)
         scores_dict[score_name] = stats
 
         ############################ Compute the Chamfer distance ########################
 
         # Compute the Chamfer distance for each timepoint on the training set.
-        stats = chamfer(adata, idx_train, "chamfer_train", time_obs, x_obsm)
+        stats = chamfer(adata, idx_train, "chamfer_train", time_key, omics_key)
         wandb.log(stats)
         scores_dict["chamfer_train"] = stats
 
         # Compute the Chamfer distance for each timepoint on the early test set.
-        stats = chamfer(adata, idx_early_test, "chamfer_early_test", time_obs, x_obsm)
+        stats = chamfer(
+            adata, idx_early_test, "chamfer_early_test", time_key, omics_key
+        )
         wandb.log(stats)
         scores_dict["chamfer_early_test"] = stats
 
         # Compute the Chamfer distance for each timepoint on the late test set.
-        stats = chamfer(adata, idx_late_test, "chamfer_late_test", time_obs, x_obsm)
+        stats = chamfer(adata, idx_late_test, "chamfer_late_test", time_key, omics_key)
         wandb.log(stats)
         scores_dict["chamfer_late_test"] = stats
 
@@ -176,10 +179,9 @@ def main(cfg: DictConfig) -> None:
         # Keyword arguments for the FGW function.
         fgw_kwargs = {
             "adata": adata,
-            "time_obs": time_obs,
-            "space_obsm": space_obsm,
-            "x_obsm": x_obsm,
-            "rank": cfg.rank,
+            "time_key": time_key,
+            "space_key": space_key,
+            "omics_key": omics_key,
         }
 
         # Compute the FGW distance for each timepoint on the training set.

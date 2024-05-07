@@ -34,8 +34,7 @@ def linear_loss(
         The Sinkhorn loss.
     """
 
-    # Define geometries, compute epsilon relative to the yy geometry.
-    # For Sinkhorn, epsilon is defined in the Geometry.
+    # Define geometries. For Sinkhorn, epsilon is defined in the Geometry.
     # For FGW, it is defined in the solver.
     geom_yy = PointCloud(y, y, epsilon=epsilon)
     geom_xx = PointCloud(x, x).copy_epsilon(geom_yy)
@@ -180,12 +179,14 @@ def loss_fn(
         )
 
         # Compute the loss between the predicted (x) and true (y) timepoints t+1.
+        right_marginal = jnp.where(_a[t + 1] > 0, 1.0, 0.0)
+        right_marginal /= jnp.sum(right_marginal)
         if quadratic:
             ot_loss = quadratic_loss(
                 x=pred_x,
                 a=_a[t],
                 y=_x[t + 1],
-                b=_a[t + 1],
+                b=right_marginal,
                 space_x=_space[t],  # We keep the current spatial coordinates ...
                 space_y=_space[t + 1],  # ... and compare them to the next coordinates.
                 fused_penalty=fused_penalty,
@@ -197,7 +198,7 @@ def loss_fn(
                 x=pred_x,
                 a=_a[t],
                 y=_x[t + 1],
-                b=_a[t + 1],
+                b=right_marginal,
                 epsilon=epsilon,
                 debias=debias,
             )

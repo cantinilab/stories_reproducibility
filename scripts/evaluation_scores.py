@@ -3,6 +3,7 @@ from typing import Union
 import numpy as np
 import jax.numpy as jnp
 from jax import Array
+import jax
 import einops
 
 # AnnData
@@ -13,7 +14,7 @@ from ott.solvers.linear.sinkhorn import Sinkhorn
 from ott.problems.linear.linear_problem import LinearProblem
 from ott.geometry.pointcloud import PointCloud
 from ott.problems.quadratic.quadratic_problem import QuadraticProblem
-from ott.solvers.quadratic.gromov_wasserstein_lr import LRGromovWasserstein, LRGWOutput
+from ott.solvers.quadratic.gromov_wasserstein_lr import LRGWOutput
 from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein, GWOutput
 
 # Spacetime
@@ -24,13 +25,14 @@ def sinkhorn(
     adata: ad.AnnData,
     idx_batches: np.ndarray,
     score_name: str,
-    time_obs: str,
-    x_obsm: str,
+    time_key: str,
+    omics_key: str,
+    max_cells: int = 10_000,
 ):
     """For each timepoint, compute the Sinkhorn distance."""
 
     # List timepoints and time differences between them.
-    timepoints = np.sort(adata[idx_batches].obs[time_obs].unique())
+    timepoints = np.sort(adata[idx_batches].obs[time_key].unique())
     t_diff = np.diff(timepoints).astype(float)
 
     # Initialize the cumulative Sinkhorn distance and divergence.
@@ -40,23 +42,49 @@ def sinkhorn(
     for i, t in enumerate(timepoints[:-1]):
 
         # Get indices for the prediction.
-        idx = adata.obs[time_obs] == t
+        idx = adata.obs[time_key] == t
         idx &= idx_batches
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx)[0],
+            (min(max_cells, idx.sum()),),
+            replace=False,
+        )
+        idx = np.full_like(idx, False)
+        idx[subset] = True
 
         # Get indices for the ground-truth.
-        idx_true = adata.obs[time_obs] == timepoints[i + 1]
+        idx_true = adata.obs[time_key] == timepoints[i + 1]
         idx_true &= idx_batches
-
-        # Define the bias geometry on the ground-truth.
-        geom_yy = PointCloud(adata.obsm[x_obsm][idx_true], epsilon=0.1, batch_size=512)
-
-        # Define the bias geometry on the prediction.
-        geom_xx = PointCloud(adata.obsm["pred"][idx], batch_size=512)
-        geom_xx = geom_xx.copy_epsilon(geom_yy)
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx_true)[0],
+            (min(max_cells, idx_true.sum()),),
+            replace=False,
+        )
+        idx_true = np.full_like(idx_true, False)
+        idx_true[subset] = True
 
         # Define the joint geometry.
         geom_xy = PointCloud(
-            adata.obsm["pred"][idx], adata.obsm[x_obsm][idx_true], batch_size=512
+            adata.obsm["pred"][idx],
+            adata.obsm[omics_key][idx_true],
+            epsilon=0.1,
+            batch_size=512,
+        )
+
+        # Define the bias geometry on the ground-truth.
+        geom_yy = PointCloud(
+            adata.obsm[omics_key][idx_true],
+            epsilon=0.1,
+            batch_size=512,
+        )
+
+        # Define the bias geometry on the prediction.
+        geom_xx = PointCloud(
+            adata.obsm["pred"][idx],
+            epsilon=0.1,
+            batch_size=512,
         ).copy_epsilon(geom_yy)
 
         # Compute the Sinkhorn distance.
@@ -69,21 +97,19 @@ def sinkhorn(
         sinkhorn_dist = float(out.reg_ot_cost)
         cum_sinkhorn_dist += t_diff[i] * sinkhorn_dist
 
-        # Compute the Sinkhorn distance.
+        # Compute the Sinkhorn distance on the bias.
         problem_bias = LinearProblem(geom_xx)
         out_bias = solver(problem_bias)
-
-        # If Sinkhorn converged, save the bias.
         assert out_bias.converged
         sinkhorn_bias = float(out_bias.reg_ot_cost)
 
-        # Compute the Sinkhorn distance.
+        # Compute the Sinkhorn distance on the bias.
         problem_bias = LinearProblem(geom_yy)
         out_bias = solver(problem_bias)
-
-        # If Sinkhorn converged, add the divergence to the cumulative divergence.
         assert out_bias.converged
         sinkhorn_bias += float(out_bias.reg_ot_cost)
+
+        # Add the divergence to the cumulative divergence.
         cum_sinkhorn_div += t_diff[i] * (sinkhorn_dist - 0.5 * sinkhorn_bias)
 
     # Save and log the Sinkhorn distance.
@@ -101,13 +127,14 @@ def chamfer(
     adata: ad.AnnData,
     idx_batches: np.ndarray,
     score_name: str,
-    time_obs: str,
-    x_obsm: str,
+    time_key: str,
+    omics_key: str,
+    max_cells: int = 10_000,
 ):
     """For each timepoint, compute the Chamfer distance."""
 
     # List timepoints and time differences between them.
-    timepoints = np.sort(adata[idx_batches].obs[time_obs].unique())
+    timepoints = np.sort(adata[idx_batches].obs[time_key].unique())
     t_diff = np.diff(timepoints).astype(float)
 
     # Initialize the cumulative Chamfer distance.
@@ -117,16 +144,32 @@ def chamfer(
     for i, t in enumerate(timepoints[:-1]):
 
         # Get indices for the prediction.
-        idx = adata.obs[time_obs] == t
+        idx = adata.obs[time_key] == t
         idx &= idx_batches
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx)[0],
+            (min(max_cells, idx.sum()),),
+            replace=False,
+        )
+        idx = np.full_like(idx, False)
+        idx[subset] = True
 
         # Get indices for the ground-truth.
-        idx_true = adata.obs[time_obs] == timepoints[i + 1]
+        idx_true = adata.obs[time_key] == timepoints[i + 1]
         idx_true &= idx_batches
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx_true)[0],
+            (min(max_cells, idx_true.sum()),),
+            replace=False,
+        )
+        idx_true = np.full_like(idx_true, False)
+        idx_true[subset] = True
 
         # Compute the Chamfer distance.
         chamfer_dist = scores.chamfer_distance(
-            jnp.array(adata[idx_true].obsm[x_obsm]),
+            jnp.array(adata[idx_true].obsm[omics_key]),
             jnp.array(adata[idx].obsm["pred"]),
         )
 
@@ -141,13 +184,14 @@ def hausdorff(
     adata: ad.AnnData,
     idx_batches: np.ndarray,
     score_name: str,
-    time_obs: str,
-    x_obsm: str,
+    time_key: str,
+    omics_key: str,
+    max_cells: int = 10_000,
 ):
     """For each timepoint, compute the Hausdorff distance."""
 
     # List timepoints and time differences between them.
-    timepoints = np.sort(adata[idx_batches].obs[time_obs].unique())
+    timepoints = np.sort(adata[idx_batches].obs[time_key].unique())
     t_diff = np.diff(timepoints).astype(float)
 
     # Initialize the cumulative Hausdorff distance.
@@ -157,16 +201,32 @@ def hausdorff(
     for i, t in enumerate(timepoints[:-1]):
 
         # Get indices for the prediction.
-        idx = adata.obs[time_obs] == t
+        idx = adata.obs[time_key] == t
         idx &= idx_batches
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx)[0],
+            (min(max_cells, idx.sum()),),
+            replace=False,
+        )
+        idx = np.full_like(idx, False)
+        idx[subset] = True
 
         # Get indices for the ground-truth.
-        idx_true = adata.obs[time_obs] == timepoints[i + 1]
+        idx_true = adata.obs[time_key] == timepoints[i + 1]
         idx_true &= idx_batches
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx_true)[0],
+            (min(max_cells, idx_true.sum()),),
+            replace=False,
+        )
+        idx_true = np.full_like(idx_true, False)
+        idx_true[subset] = True
 
         # Compute the Hausdorff distance.
         hausdorff_dist = scores.hausdorff_distance(
-            jnp.array(adata[idx_true].obsm[x_obsm]),
+            jnp.array(adata[idx_true].obsm[omics_key]),
             jnp.array(adata[idx].obsm["pred"]),
         )
 
@@ -213,99 +273,125 @@ def compute_quad(x: Array, y: Array, out: Union[GWOutput, LRGWOutput]):
     return quad_cost
 
 
+def compute_lin(x: Array, y: Array, out: Union[GWOutput, LRGWOutput]):
+    """Compute the linear component of FGW.
+
+    In the following, we compute sum_ij C_ij P_ij."""
+
+    # Convert the xy geometry to low rank, ie C = A @ B.T
+    # This way, we do not have to materialize the matrix C.
+    geom_xy_lr = PointCloud(x, y).to_LRCGeometry()
+    A, B = geom_xy_lr.cost_1, geom_xy_lr.cost_2
+
+    # The trick out.apply(A.T) = A.T @ out.matrix allows to
+    # not materialize the matrix out.matrix.
+    lin_cost = einops.einsum(B, out.apply(A.T), "j p, p j ->")
+
+    # Return the sum of the three terms.
+    return lin_cost
+
+
 def fgw(
     adata: ad.AnnData,
     idx_batches: np.ndarray,
     score_name: str,
-    time_obs: str,
-    space_obsm: str,
-    x_obsm: str,
-    rank: int,
+    time_key: str,
+    space_key: str,
+    omics_key: str,
+    max_cells: int = 10_000,
 ):
     """For each timepoint, compute the FGW distance."""
 
     # List timepoints and time differences between them.
-    timepoints = np.sort(adata[idx_batches].obs[time_obs].unique())
+    timepoints = np.sort(adata[idx_batches].obs[time_key].unique())
     t_diff = np.diff(timepoints).astype(float)
 
+    # Define fused penalty and epsilon
+    fused = 50.0
+    epsilon = 0.1 * (1 + fused)
+
     # Initialize the cumulative FGW distance and divergence.
-    cum_gw_dist, cum_fgw_dist, cum_fgw_div = 0.0, 0.0, 0.0
+    cum_lin_dist, cum_quad_dist, cum_fgw_dist, cum_fgw_div = 0.0, 0.0, 0.0, 0.0
 
     for i, t in enumerate(timepoints[:-1]):
 
         # Get indices for the prediction.
-        idx = adata.obs[time_obs] == t
+        idx = adata.obs[time_key] == t
         idx &= idx_batches
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx)[0],
+            (min(max_cells, idx.sum()),),
+            replace=False,
+        )
+        idx = np.full_like(idx, False)
+        idx[subset] = True
 
         # Get indices for the ground-truth.
-        idx_true = adata.obs[time_obs] == timepoints[i + 1]
+        idx_true = adata.obs[time_key] == timepoints[i + 1]
         idx_true &= idx_batches
+        subset = jax.random.choice(
+            jax.random.PRNGKey(0),
+            np.where(idx_true)[0],
+            (min(max_cells, idx_true.sum()),),
+            replace=False,
+        )
+        idx_true = np.full_like(idx_true, False)
+        idx_true[subset] = True
 
         # Define the spatial geometry on the prediction and ground-truth
-        geom_s_xx = PointCloud(adata.obsm[space_obsm][idx], batch_size=512)
-        geom_s_yy = PointCloud(adata.obsm[space_obsm][idx_true], batch_size=512)
+        geom_s_xx = PointCloud(adata.obsm[space_key][idx], batch_size=512)
+        geom_s_yy = PointCloud(adata.obsm[space_key][idx_true], batch_size=512)
 
         # Define the joint gene geometry on the prediction and ground-truth.
         geom_xy = PointCloud(
-            adata.obsm["pred"][idx], adata.obsm[x_obsm][idx_true], batch_size=512
+            adata.obsm["pred"][idx],
+            adata.obsm[omics_key][idx_true],
+            batch_size=512,
         )
         geom_xx = PointCloud(adata.obsm["pred"][idx], batch_size=512)
-        geom_yy = PointCloud(adata.obsm[x_obsm][idx_true], batch_size=512)
+        geom_yy = PointCloud(adata.obsm[omics_key][idx_true], batch_size=512)
 
         # Define keyword arguments for the solver.
         solver_kwds = {"inner_iterations": 100, "max_iterations": 500_000}
-        if rank == -1:
-            solver_kwds["warm_start"] = True
-        else:
-            solver_kwds["rank"] = rank
+        solver_kwds["warm_start"] = True
 
-        # Start with computing the ground-truth bias, which will detrmine the epsilon.
-        problem = QuadraticProblem(geom_s_yy, geom_s_yy, geom_yy, fused_penalty=20.0)
-        if rank == -1:
-            solver = GromovWasserstein(
-                relative_epsilon=True, epsilon=0.01, **solver_kwds
-            )
-        else:
-            solver = LRGromovWasserstein(**solver_kwds)
+        # Compute the FGW distance between point clouds x and y.
+        problem = QuadraticProblem(geom_s_xx, geom_s_yy, geom_xy, fused_penalty=fused)
+        solver = GromovWasserstein(epsilon=epsilon, **solver_kwds)
+        out = solver(problem)
+        assert out.converged
+
+        # Compute the ground-truth bias
+        problem = QuadraticProblem(geom_s_yy, geom_s_yy, geom_yy, fused_penalty=fused)
+        solver = GromovWasserstein(epsilon=epsilon, **solver_kwds)
         out_yy = solver(problem)
-
-        # If FGW converged, add the distance to the bias.
         assert out_yy.converged
         bias = float(out_yy.reg_gw_cost)
 
         # Then compute the prediction bias.
-        problem = QuadraticProblem(geom_s_xx, geom_s_xx, geom_xx, fused_penalty=20.0)
-        if rank == -1:
-            solver = GromovWasserstein(epsilon=out_yy.geom.epsilon, **solver_kwds)
-        else:
-            solver = LRGromovWasserstein(**solver_kwds)
+        problem = QuadraticProblem(geom_s_xx, geom_s_xx, geom_xx, fused_penalty=fused)
+        solver = GromovWasserstein(epsilon=epsilon, **solver_kwds)
         out_xx = solver(problem)
-
-        # If FGW converged, add the distance to the bias.
         assert out_xx.converged
         bias += float(out_xx.reg_gw_cost)
 
-        # Compute the FGW distance between point clouds x and y.
-        problem = QuadraticProblem(geom_s_xx, geom_s_yy, geom_xy, fused_penalty=20.0)
-        if rank == -1:
-            solver = GromovWasserstein(epsilon=out_yy.geom.epsilon, **solver_kwds)
-        else:
-            solver = LRGromovWasserstein(**solver_kwds)
-        out = solver(problem)
-
-        # If FGW converged, add the distance to the cumulative distance.
-        # Also compute the divergence and the quadratic component.
-        assert out.converged
+        # Add the distance to the cumulative distance.
         cum_fgw_dist += t_diff[i] * float(out.reg_gw_cost)
+        # Also compute the divergence...
         cum_fgw_div += t_diff[i] * (float(out.reg_gw_cost) - 0.5 * bias)
-        cum_gw_dist += t_diff[i] * float(compute_quad(geom_s_xx.x, geom_s_yy.y, out))
+        # ...and the quadratic component...
+        cum_quad_dist += t_diff[i] * float(compute_quad(geom_s_xx.x, geom_s_yy.y, out))
+        # ...and the linear component.
+        cum_lin_dist += t_diff[i] * float(compute_lin(geom_xy.x, geom_xy.y, out))
 
     # Save and log the FGW distance.
     stats = {
         "timepoint": t,
         score_name: cum_fgw_dist / t_diff.sum(),
-        f"{score_name}_div": cum_fgw_dist / t_diff.sum(),
-        f"quad_{score_name}": cum_gw_dist / t_diff.sum(),
+        f"{score_name}_div": cum_fgw_div / t_diff.sum(),
+        f"quad_{score_name}": cum_quad_dist / t_diff.sum(),
+        f"lin_{score_name}": cum_lin_dist / t_diff.sum(),
     }
 
     # Return stats and information useful for plotting.
