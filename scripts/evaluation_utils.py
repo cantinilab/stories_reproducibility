@@ -171,7 +171,7 @@ def define_model(
     teacher_forcing: bool,
     quadratic: bool,
     epsilon: float,
-    fused_penalty: float,
+    quadratic_weight: float,
     save_interval_steps: int,
     checkpoint_path: str,
 ):
@@ -204,7 +204,7 @@ def define_model(
         quadratic=quadratic,
         epsilon=epsilon,
         log_callback=lambda x: wandb.log(x),
-        fused_penalty=fused_penalty,
+        quadratic_weight=quadratic_weight,
     )
 
     # Define the checkpoint manager.

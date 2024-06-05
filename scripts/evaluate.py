@@ -70,7 +70,7 @@ def main(cfg: DictConfig) -> None:
             teacher_forcing=eval_cfg.model.teacher_forcing,
             quadratic=eval_cfg.model.quadratic,
             epsilon=eval_cfg.model.epsilon,
-            fused_penalty=eval_cfg.model.fused,
+            quadratic_weight=eval_cfg.model.quadratic_weight,
             save_interval_steps=eval_cfg.optimizer.checkpoint_interval,
             checkpoint_path=cfg.checkpoint_path,
         )
@@ -90,19 +90,25 @@ def main(cfg: DictConfig) -> None:
 
         # Compute the Sinkhorn distance for each timepoint on the training set.
         score_name = "sinkhorn_train"
-        stats, _ = sinkhorn(adata, idx_train, score_name, time_key, omics_key)
+        stats, _ = sinkhorn(
+            adata, idx_train, score_name, time_key, omics_key, space_key
+        )
         wandb.log(stats)
         scores_dict[score_name] = stats
 
         # Compute the Sinkhorn distance for each timepoint on the early test set.
         score_name = "sinkhorn_early_test"
-        stats, _ = sinkhorn(adata, idx_early_test, score_name, time_key, omics_key)
+        stats, _ = sinkhorn(
+            adata, idx_early_test, score_name, time_key, omics_key, space_key
+        )
         wandb.log(stats)
         scores_dict[score_name] = stats
 
         # Compute the Sinkhorn distance for each timepoint on the late test set.
         score_name = "sinkhorn_late_test"
-        stats, res = sinkhorn(adata, idx_late_test, score_name, time_key, omics_key)
+        stats, res = sinkhorn(
+            adata, idx_late_test, score_name, time_key, omics_key, space_key
+        )
         idx_last, idx_true_last, out_last, timepoints_last = res  # Keep for plot.
         wandb.log(stats)
         scores_dict[score_name] = stats
@@ -122,18 +128,18 @@ def main(cfg: DictConfig) -> None:
         }
 
         # Plot the last Sinkhorn plan.
-        fig, axes = plot_plan(
-            idx_last=idx_last,
-            idx_true_last=idx_true_last,
-            timepoints_last=timepoints_last,
-            out_last=out_last,
-            **plot_kwds,
-        )
+        # fig, axes = plot_plan(
+        #     idx_last=idx_last,
+        #     idx_true_last=idx_true_last,
+        #     timepoints_last=timepoints_last,
+        #     out_last=out_last,
+        #     **plot_kwds,
+        # )
 
-        # Log the plot.
-        image = wandb.Image(plt)
-        wandb.log({"Sinkhorn plan": image})
-        plt.close("all")
+        # # Log the plot.
+        # image = wandb.Image(plt)
+        # wandb.log({"Sinkhorn plan": image})
+        # plt.close("all")
 
         ############################ Compute the Hausdorff distance ######################
 
@@ -206,18 +212,18 @@ def main(cfg: DictConfig) -> None:
         ############################# Plot the last FGW plan #############################
 
         # Plot the last FGW plan.
-        fig, axes = plot_plan(
-            idx_last=idx_last,
-            idx_true_last=idx_true_last,
-            timepoints_last=timepoints_last,
-            out_last=out_last,
-            **plot_kwds,
-        )
+        # fig, axes = plot_plan(
+        #     idx_last=idx_last,
+        #     idx_true_last=idx_true_last,
+        #     timepoints_last=timepoints_last,
+        #     out_last=out_last,
+        #     **plot_kwds,
+        # )
 
-        # Log the plot.
-        image = wandb.Image(plt)
-        wandb.log({"FGW plan": image})
-        plt.close("all")
+        # # Log the plot.
+        # image = wandb.Image(plt)
+        # wandb.log({"FGW plan": image})
+        # plt.close("all")
 
         ################################# Finish the run #################################
 

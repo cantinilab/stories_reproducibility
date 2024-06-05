@@ -8,6 +8,7 @@ from ott.geometry.pointcloud import PointCloud
 from typing import Dict
 from ott.problems.linear.linear_problem import LinearProblem
 import jax.numpy as jnp
+import numpy as np
 import optax
 import jax
 
@@ -71,7 +72,7 @@ def quadratic_loss(
     space_x: jax.Array,
     space_y: jax.Array,
     epsilon: float,
-    fused_penalty: float,
+    quadratic_weight: float,
     debias: bool,
 ) -> float:
     """FGW loss
@@ -91,48 +92,57 @@ def quadratic_loss(
         space_x: A pointcloud on the space of spatial coordinates.
         space_y: Another pointcloud on the space of spatial coordinates.
         epsilon: Entropic regularization parameter.
-        fused_penalty: The penalty for the fused term.
+        quadratic_weight: The relative weight of the quadratic term, between 0 and 1.
         debias: Whether to debias the loss.
 
     Returns:
         The FGW loss.
     """
 
+    # The cost scalings are based on the desired quadratic weight.
+    # See https://github.com/ott-jax/ott/issues/546
     # Define geometries on space for xx, yy, and on genes for xy, xx and yy.
     # For Sinkhorn, epsilon is defined in the Geometry.
     # For FGW, it is defined in the solver.
-    geom_s_x = PointCloud(space_x)
-    geom_s_y = PointCloud(space_y)
-    geom_xy = PointCloud(x, y)
-    geom_xx = PointCloud(x)
-    geom_yy = PointCloud(y)
+    geom_s_x = PointCloud(
+        space_x,
+        space_x,
+        scale_cost=(1 / np.sqrt(quadratic_weight)),
+    )
+    geom_s_y = PointCloud(
+        space_y,
+        space_y,
+        scale_cost=(1 / np.sqrt(quadratic_weight)),
+    )
+    geom_xy = PointCloud(x, y, scale_cost=(1 / (1 - quadratic_weight)))
+    geom_xx = PointCloud(x, x, scale_cost=(1 / (1 - quadratic_weight)))
+    geom_yy = PointCloud(y, y, scale_cost=(1 / (1 - quadratic_weight)))
 
     # These keyword arguments are passed to all quadratic problems.
-    fused_kwds = {"fused_penalty": fused_penalty}
     gw_kwds = {
         "implicit_diff": ImplicitDiff(symmetric=True),
-        "epsilon": epsilon * (1 + fused_penalty),
+        "epsilon": epsilon,
         "relative_epsilon": False,
     }
 
     # Compute the FGW loss between point clouds x and y.
-    problem = QuadraticProblem(geom_s_x, geom_s_y, geom_xy, a=a, b=b, **fused_kwds)
+    problem = QuadraticProblem(geom_s_x, geom_s_y, geom_xy, a=a, b=b)
     ott_solver = GromovWasserstein(**gw_kwds)
     ot_loss = ott_solver(problem).reg_gw_cost
 
     if debias:
         # Substracting 0.5 * FGW(x, x).
-        problem = QuadraticProblem(geom_s_x, geom_s_x, geom_xx, a=a, b=a, **fused_kwds)
+        problem = QuadraticProblem(geom_s_x, geom_s_x, geom_xx, a=a, b=a)
         ott_solver = GromovWasserstein(**gw_kwds)
         ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
 
         # Substracting 0.5 * FGW(y, y).
-        problem = QuadraticProblem(geom_s_y, geom_s_y, geom_yy, a=b, b=b, **fused_kwds)
+        problem = QuadraticProblem(geom_s_y, geom_s_y, geom_yy, a=b, b=b)
         ott_solver = GromovWasserstein(**gw_kwds)
         ot_loss -= 0.5 * ott_solver(problem).reg_gw_cost
 
     # Return the loss.
-    return ot_loss / (1 + fused_penalty)
+    return ot_loss
 
 
 def loss_fn(
@@ -145,7 +155,7 @@ def loss_fn(
     n_steps: int,
     epsilon: float,
     debias: bool,
-    fused_penalty: float,
+    quadratic_weight: float,
     tau_diff: jax.Array,
 ) -> jax.Array:
     """The loss function
@@ -160,7 +170,7 @@ def loss_fn(
         n_steps: The number of steps to take.
         epsilon: Entropic regularization parameter.
         debias: Whether to debias the loss (see linear_loss or quadratic_loss).
-        fused_penalty: Parameter indicting weight of the fused term.
+        quadratic_weight: The relative weight of the quadratic term, between 0 and 1.
         tau_diff: The difference in time between each timepoint, e.g. [1., 1., 2.].
 
     Returns:
@@ -189,7 +199,7 @@ def loss_fn(
                 b=right_marginal,
                 space_x=_space[t],  # We keep the current spatial coordinates ...
                 space_y=_space[t + 1],  # ... and compare them to the next coordinates.
-                fused_penalty=fused_penalty,
+                quadratic_weight=quadratic_weight,
                 epsilon=epsilon,
                 debias=debias,
             )

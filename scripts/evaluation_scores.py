@@ -10,11 +10,10 @@ import einops
 import anndata as ad
 
 # OTT
-from ott.solvers.linear.sinkhorn import Sinkhorn
+from ott.solvers.linear.sinkhorn import Sinkhorn, SinkhornOutput
 from ott.problems.linear.linear_problem import LinearProblem
 from ott.geometry.pointcloud import PointCloud
 from ott.problems.quadratic.quadratic_problem import QuadraticProblem
-from ott.solvers.quadratic.gromov_wasserstein_lr import LRGWOutput
 from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein, GWOutput
 
 # Spacetime
@@ -27,7 +26,8 @@ def sinkhorn(
     score_name: str,
     time_key: str,
     omics_key: str,
-    max_cells: int = 10_000,
+    space_key: str,
+    max_cells: int = 6_000,
 ):
     """For each timepoint, compute the Sinkhorn distance."""
 
@@ -37,6 +37,7 @@ def sinkhorn(
 
     # Initialize the cumulative Sinkhorn distance and divergence.
     cum_sinkhorn_dist, cum_sinkhorn_div = 0.0, 0.0
+    cum_quad_sinkhorn_dist, cum_lin_sinkhorn_dist = 0.0, 0.0
 
     # Iterate over timepoints.
     for i, t in enumerate(timepoints[:-1]):
@@ -70,32 +71,41 @@ def sinkhorn(
             adata.obsm["pred"][idx],
             adata.obsm[omics_key][idx_true],
             epsilon=0.1,
-            batch_size=512,
         )
 
         # Define the bias geometry on the ground-truth.
         geom_yy = PointCloud(
             adata.obsm[omics_key][idx_true],
             epsilon=0.1,
-            batch_size=512,
         )
 
         # Define the bias geometry on the prediction.
         geom_xx = PointCloud(
             adata.obsm["pred"][idx],
             epsilon=0.1,
-            batch_size=512,
         ).copy_epsilon(geom_yy)
+
+        # Define the spatial geometry on the prediction and ground-truth
+        geom_s_xx = PointCloud(adata.obsm[space_key][idx])
+        geom_s_yy = PointCloud(adata.obsm[space_key][idx_true])
 
         # Compute the Sinkhorn distance.
         problem = LinearProblem(geom_xy)
-        solver = Sinkhorn(inner_iterations=100, max_iterations=10_000)
+        solver = Sinkhorn(inner_iterations=100, max_iterations=6_000)
         out = solver(problem)
 
         # If Sinkhorn converged, add the distance to the cumulative distance.
         assert out.converged
         sinkhorn_dist = float(out.reg_ot_cost)
         cum_sinkhorn_dist += t_diff[i] * sinkhorn_dist
+        # ...and the quadratic component...
+        cum_quad_sinkhorn_dist += t_diff[i] * float(
+            compute_quad(geom_s_xx.x, geom_s_yy.y, out)
+        )
+        # ...and the linear component.
+        cum_lin_sinkhorn_dist += t_diff[i] * float(
+            compute_lin(geom_xy.x, geom_xy.y, out)
+        )
 
         # Compute the Sinkhorn distance on the bias.
         problem_bias = LinearProblem(geom_xx)
@@ -117,6 +127,8 @@ def sinkhorn(
         "timepoint": t,
         score_name: cum_sinkhorn_dist / t_diff.sum(),
         f"{score_name}_div": cum_sinkhorn_div / t_diff.sum(),
+        f"quad_{score_name}": cum_quad_sinkhorn_dist / t_diff.sum(),
+        f"lin_{score_name}": cum_lin_sinkhorn_dist / t_diff.sum(),
     }
 
     # Return stats and information useful for plotting.
@@ -129,7 +141,7 @@ def chamfer(
     score_name: str,
     time_key: str,
     omics_key: str,
-    max_cells: int = 10_000,
+    max_cells: int = 6_000,
 ):
     """For each timepoint, compute the Chamfer distance."""
 
@@ -186,7 +198,7 @@ def hausdorff(
     score_name: str,
     time_key: str,
     omics_key: str,
-    max_cells: int = 10_000,
+    max_cells: int = 6_000,
 ):
     """For each timepoint, compute the Hausdorff distance."""
 
@@ -237,8 +249,8 @@ def hausdorff(
     return {"timepoint": t, score_name: cum_hausdorff_dist / t_diff.sum()}
 
 
-def compute_quad(x: Array, y: Array, out: Union[GWOutput, LRGWOutput]):
-    """Compute the quadratic component of FGW.
+def compute_quad(x: Array, y: Array, out: Union[SinkhornOutput, GWOutput]):
+    """Compute the quadratic component.
 
     In the following, we compute sum_ijkl |C1_ij - C2_kl|^2 P_ik P_jl.
     This is equivalent to the sum of three terms:
@@ -273,8 +285,8 @@ def compute_quad(x: Array, y: Array, out: Union[GWOutput, LRGWOutput]):
     return quad_cost
 
 
-def compute_lin(x: Array, y: Array, out: Union[GWOutput, LRGWOutput]):
-    """Compute the linear component of FGW.
+def compute_lin(x: Array, y: Array, out: Union[SinkhornOutput, GWOutput]):
+    """Compute the linear component.
 
     In the following, we compute sum_ij C_ij P_ij."""
 
@@ -298,7 +310,7 @@ def fgw(
     time_key: str,
     space_key: str,
     omics_key: str,
-    max_cells: int = 10_000,
+    max_cells: int = 6_000,
 ):
     """For each timepoint, compute the FGW distance."""
 
@@ -306,9 +318,9 @@ def fgw(
     timepoints = np.sort(adata[idx_batches].obs[time_key].unique())
     t_diff = np.diff(timepoints).astype(float)
 
-    # Define fused penalty and epsilon
-    fused = 50.0
-    epsilon = 0.1 * (1 + fused)
+    # Define relative quadratic weight and epsilon
+    quadratic_weight = 1e-2
+    epsilon = 0.1
 
     # Initialize the cumulative FGW distance and divergence.
     cum_lin_dist, cum_quad_dist, cum_fgw_dist, cum_fgw_div = 0.0, 0.0, 0.0, 0.0
@@ -340,38 +352,46 @@ def fgw(
         idx_true[subset] = True
 
         # Define the spatial geometry on the prediction and ground-truth
-        geom_s_xx = PointCloud(adata.obsm[space_key][idx], batch_size=512)
-        geom_s_yy = PointCloud(adata.obsm[space_key][idx_true], batch_size=512)
+        geom_s_xx = PointCloud(
+            adata.obsm[space_key][idx],
+            scale_cost=(1 / np.sqrt(quadratic_weight)),
+        )
+        geom_s_yy = PointCloud(
+            adata.obsm[space_key][idx_true],
+            scale_cost=(1 / np.sqrt(quadratic_weight)),
+        )
 
         # Define the joint gene geometry on the prediction and ground-truth.
         geom_xy = PointCloud(
             adata.obsm["pred"][idx],
             adata.obsm[omics_key][idx_true],
-            batch_size=512,
+            scale_cost=(1 / (1 - quadratic_weight)),
         )
-        geom_xx = PointCloud(adata.obsm["pred"][idx], batch_size=512)
-        geom_yy = PointCloud(adata.obsm[omics_key][idx_true], batch_size=512)
-
-        # Define keyword arguments for the solver.
-        solver_kwds = {"inner_iterations": 100, "max_iterations": 500_000}
-        solver_kwds["warm_start"] = True
+        geom_xx = PointCloud(
+            adata.obsm["pred"][idx],
+            scale_cost=(1 / (1 - quadratic_weight)),
+        )
+        geom_yy = PointCloud(
+            adata.obsm[omics_key][idx_true],
+            scale_cost=(1 / (1 - quadratic_weight)),
+        )
 
         # Compute the FGW distance between point clouds x and y.
-        problem = QuadraticProblem(geom_s_xx, geom_s_yy, geom_xy, fused_penalty=fused)
-        solver = GromovWasserstein(epsilon=epsilon, **solver_kwds)
+        problem = QuadraticProblem(geom_s_xx, geom_s_yy, geom_xy)
+        solver = GromovWasserstein(epsilon=epsilon)
         out = solver(problem)
         assert out.converged
 
         # Compute the ground-truth bias
-        problem = QuadraticProblem(geom_s_yy, geom_s_yy, geom_yy, fused_penalty=fused)
-        solver = GromovWasserstein(epsilon=epsilon, **solver_kwds)
+        problem = QuadraticProblem(geom_s_yy, geom_s_yy, geom_yy)
+        solver = GromovWasserstein(epsilon=epsilon)
         out_yy = solver(problem)
         assert out_yy.converged
         bias = float(out_yy.reg_gw_cost)
 
         # Then compute the prediction bias.
-        problem = QuadraticProblem(geom_s_xx, geom_s_xx, geom_xx, fused_penalty=fused)
-        solver = GromovWasserstein(epsilon=epsilon, **solver_kwds)
+        problem = QuadraticProblem(geom_s_xx, geom_s_xx, geom_xx)
+        solver = GromovWasserstein(epsilon=epsilon)
         out_xx = solver(problem)
         assert out_xx.converged
         bias += float(out_xx.reg_gw_cost)

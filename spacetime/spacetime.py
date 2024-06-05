@@ -33,9 +33,9 @@ class SpaceTime:
         teacher_forcing (bool, optional): Use teacher forcing. Defaults to True.
         quadratic (bool, optional): Use a Fused GW loss. Defaults to True.
         debias (bool, optional): Whether to debias the loss. Defaults to True.
-        epsilon (float, optional): The (relative) entropic reg. Defaults to 0.01.
+        epsilon (float, optional): The (relative) entropic reg. Defaults to 0.05.
         log_callback (Callable, optional): The callback for logging. Defaults to None.
-        fused_penalty (float, optional): Weight of the linear term. Defaults to 5.0.
+        quadratic_weight (float, optional): TRelative weight of the quadratic term, between 0 and 1.
     """
 
     potential: nn.Module = MLPPotential()
@@ -46,7 +46,7 @@ class SpaceTime:
     debias: bool = True
     epsilon: float = 0.05
     log_callback: Callable | None = None
-    fused_penalty: float = 5.0
+    quadratic_weight: float = 1e-2
 
     def fit(
         self,
@@ -81,6 +81,12 @@ class SpaceTime:
             key (KeyArray, optional): The random key. Defaults to PRNGKey(0).
         """
 
+        # Assert the quadratic weight is strictly between 0 and 1 if self.quadratic.
+        if self.quadratic:
+            assert (
+                0 < self.quadratic_weight < 1
+            ), "Relative quadratic weight must be strictly between 0 and 1."
+
         # Initialize the statistics for logging.
         self.train_it, self.train_losses = [], []
         self.val_it, self.val_losses = [], []
@@ -105,7 +111,11 @@ class SpaceTime:
 
         # Define some arguments shared by the train and validation loss.
         lkwargs = {"teacher_forcing": self.teacher_forcing, "potential": self.potential}
-        lkwargs = {**lkwargs, "tau_diff": tau_diff, "fused_penalty": self.fused_penalty}
+        lkwargs = {
+            **lkwargs,
+            "tau_diff": tau_diff,
+            "quadratic_weight": self.quadratic_weight,
+        }
         lkwargs = {**lkwargs, "quadratic": self.quadratic, "debias": self.debias}
         lkwargs = {**lkwargs, "n_steps": self.n_steps, "epsilon": self.epsilon}
         lkwargs = {**lkwargs, "proximal_step": self.proximal_step}

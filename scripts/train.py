@@ -63,8 +63,8 @@ def main(cfg: DictConfig) -> None:
             mu = np.mean(adata.obsm[space_key][idx, :], axis=0)
             adata.obsm[space_key][idx, :] -= mu
 
-            sigma = np.std(adata.obsm[space_key][idx, :], axis=0)
-            adata.obsm[space_key][idx, :] /= sigma
+            std = np.std(adata.obsm[space_key][idx, :], axis=0)
+            adata.obsm[space_key][idx, :] /= std
         print("Centered and scaled space.")
 
         # Intialize keyword arguments for the proximal step.
@@ -93,8 +93,9 @@ def main(cfg: DictConfig) -> None:
             teacher_forcing=cfg.model.teacher_forcing,
             quadratic=cfg.model.quadratic,
             epsilon=cfg.model.epsilon,
+            n_steps=cfg.model.n_steps,
             log_callback=lambda x: wandb.log(x),
-            fused_penalty=cfg.model.fused,
+            quadratic_weight=cfg.model.quadratic_weight,
             debias=cfg.model.debias,
         )
         print("Initialized model.")
