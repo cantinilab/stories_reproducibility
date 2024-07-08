@@ -1,7 +1,0 @@
-defaults:
-  - submitit_slurm
-
-tasks_per_node: 1
-mem_per_cpu: 500000
-partition: "common"
-timeout_min: 240
