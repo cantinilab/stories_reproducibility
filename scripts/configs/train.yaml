@@ -3,12 +3,12 @@ n_pcs: 20 # Number of principal components to use
 
 # Configuration for the model
 model:
-  epsilon: 0.05 # The entropic regularization for the outer loss
+  epsilon: 0.01 # The entropic regularization for the outer loss
   debias: true # Whether to use debiasing
   teacher_forcing: true # Whether to use teacher forcing
   n_steps: 1 # Number of steps
   quadratic: true # If true, use FGW instead of Sinkhorn
-  quadratic_weight: 0.01 # Fused penalty, used if quadratic=true
+  quadratic_weight: 0.0 # Fused penalty, used if quadratic=true
   seed: ??? # The random seed
 
 # Configuration for the neural potential function

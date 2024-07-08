@@ -8,7 +8,6 @@ def main(cfg: DictConfig) -> None:
     try:
         import pickle
         import jax
-        import matplotlib.pyplot as plt
         import numpy as np
         import wandb
         from flatten_dict import flatten
@@ -20,7 +19,7 @@ def main(cfg: DictConfig) -> None:
             "/pasteur/zeus/projets/p02/ml4ig_hot/Users/ghuizing/space-time/scripts"
         )
 
-        from evaluation_utils import pred, load_data, define_model, plot_plan
+        from evaluation_utils import pred, load_data, define_model
         from evaluation_scores import sinkhorn, chamfer, hausdorff, fgw
 
         ################################ Get the configuration ###########################
@@ -109,37 +108,8 @@ def main(cfg: DictConfig) -> None:
         stats, res = sinkhorn(
             adata, idx_late_test, score_name, time_key, omics_key, space_key
         )
-        idx_last, idx_true_last, out_last, timepoints_last = res  # Keep for plot.
         wandb.log(stats)
         scores_dict[score_name] = stats
-
-        ############################# Plot the last Sinkhorn plan ########################
-
-        # Reproducible random points.
-        key, n_cells = jax.random.PRNGKey(0), adata[idx_last].n_obs
-        random_j = np.array(jax.random.choice(key, n_cells, shape=(10,), replace=False))
-
-        # Keyword arguments for the plot.
-        plot_kwds = {
-            "adata": adata,
-            "space_key": space_key,
-            "annotation_key": annotation_key,
-            "random_j": random_j,
-        }
-
-        # Plot the last Sinkhorn plan.
-        # fig, axes = plot_plan(
-        #     idx_last=idx_last,
-        #     idx_true_last=idx_true_last,
-        #     timepoints_last=timepoints_last,
-        #     out_last=out_last,
-        #     **plot_kwds,
-        # )
-
-        # # Log the plot.
-        # image = wandb.Image(plt)
-        # wandb.log({"Sinkhorn plan": image})
-        # plt.close("all")
 
         ############################ Compute the Hausdorff distance ######################
 
@@ -205,25 +175,8 @@ def main(cfg: DictConfig) -> None:
         # Compute the FGW distance for each timepoint on the late test set.
         score_name = "fgw_late_test"
         stats, res = fgw(idx_batches=idx_late_test, score_name=score_name, **fgw_kwargs)
-        idx_last, idx_true_last, out_last, timepoints_last = res  # Keep for plot.
         wandb.log(stats)
         scores_dict[score_name] = stats
-
-        ############################# Plot the last FGW plan #############################
-
-        # Plot the last FGW plan.
-        # fig, axes = plot_plan(
-        #     idx_last=idx_last,
-        #     idx_true_last=idx_true_last,
-        #     timepoints_last=timepoints_last,
-        #     out_last=out_last,
-        #     **plot_kwds,
-        # )
-
-        # # Log the plot.
-        # image = wandb.Image(plt)
-        # wandb.log({"FGW plan": image})
-        # plt.close("all")
 
         ################################# Finish the run #################################
 

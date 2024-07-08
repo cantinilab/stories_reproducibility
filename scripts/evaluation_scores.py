@@ -91,7 +91,7 @@ def sinkhorn(
 
         # Compute the Sinkhorn distance.
         problem = LinearProblem(geom_xy)
-        solver = Sinkhorn(inner_iterations=100, max_iterations=6_000)
+        solver = Sinkhorn()
         out = solver(problem)
 
         # If Sinkhorn converged, add the distance to the cumulative distance.
@@ -319,8 +319,8 @@ def fgw(
     t_diff = np.diff(timepoints).astype(float)
 
     # Define relative quadratic weight and epsilon
-    quadratic_weight = 1e-2
-    epsilon = 0.1
+    quadratic_weight = 1e-3
+    epsilon = 1e-3
 
     # Initialize the cumulative FGW distance and divergence.
     cum_lin_dist, cum_quad_dist, cum_fgw_dist, cum_fgw_div = 0.0, 0.0, 0.0, 0.0
@@ -377,20 +377,20 @@ def fgw(
         )
 
         # Compute the FGW distance between point clouds x and y.
-        problem = QuadraticProblem(geom_s_xx, geom_s_yy, geom_xy)
+        problem = QuadraticProblem(geom_s_xx, geom_s_yy, geom_xy, fused_penalty=1.0)
         solver = GromovWasserstein(epsilon=epsilon)
         out = solver(problem)
         assert out.converged
 
         # Compute the ground-truth bias
-        problem = QuadraticProblem(geom_s_yy, geom_s_yy, geom_yy)
+        problem = QuadraticProblem(geom_s_yy, geom_s_yy, geom_yy, fused_penalty=1.0)
         solver = GromovWasserstein(epsilon=epsilon)
         out_yy = solver(problem)
         assert out_yy.converged
         bias = float(out_yy.reg_gw_cost)
 
         # Then compute the prediction bias.
-        problem = QuadraticProblem(geom_s_xx, geom_s_xx, geom_xx)
+        problem = QuadraticProblem(geom_s_xx, geom_s_xx, geom_xx, fused_penalty=1.0)
         solver = GromovWasserstein(epsilon=epsilon)
         out_xx = solver(problem)
         assert out_xx.converged
