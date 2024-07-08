@@ -2,7 +2,6 @@ from .steps.proximal_step import ProximalStep
 import flax.linen as nn
 from ott.problems.quadratic.quadratic_problem import QuadraticProblem
 from ott.solvers.linear.sinkhorn import Sinkhorn
-from ott.solvers.linear.implicit_differentiation import ImplicitDiff
 from ott.solvers.quadratic.gromov_wasserstein import GromovWasserstein
 from ott.geometry.pointcloud import PointCloud
 from typing import Dict
@@ -41,24 +40,21 @@ def linear_loss(
     geom_xx = PointCloud(x, x).copy_epsilon(geom_yy)
     geom_xy = PointCloud(x, y).copy_epsilon(geom_yy)
 
-    # Define some hyperparameters.
-    implicit_diff = ImplicitDiff(symmetric=True)
-
     # Compute the Sinkhorn loss between point clouds x and y.
     problem = LinearProblem(geom_xy, a=a, b=b)
-    ott_solver = Sinkhorn(implicit_diff=implicit_diff)
+    ott_solver = Sinkhorn(threshold=1e-3)
     ot_loss = ott_solver(problem).reg_ot_cost
 
     # We assume x and y to have the same mass, so no need for the m(a) - m(b) term.
     if debias:
         # Debias the Sinkhorn loss with the xx term.
         problem = LinearProblem(geom_xx, a=a, b=a)
-        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
+        ott_solver = Sinkhorn(threshold=1e-3)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
         # Debias the Sinkhorn loss with the yy term.
         problem = LinearProblem(geom_yy, a=b, b=b)
-        ott_solver = Sinkhorn(implicit_diff=implicit_diff)
+        ott_solver = Sinkhorn(threshold=1e-3)
         ot_loss -= 0.5 * ott_solver(problem).reg_ot_cost
 
     return ot_loss
@@ -79,7 +75,7 @@ def quadratic_loss(
     The linear part of the loss operates on the gene coordinates.
     The quadratic part of the loss operates on the space coordinates.
 
-    The issue with Fused Gromov-Wasserstein is that it is biased, ie
+    The issue with entropic Fused Gromov-Wasserstein is that it is biased, ie
     FGW(x, y) != 0 when x=y. We can compute instead the following:
              FGW(x, y) - 0.5 * FGW(x, x) - 0.5 * FGW(y, y)
     As done in http://proceedings.mlr.press/v97/bunne19a/bunne19a.pdf
@@ -119,11 +115,7 @@ def quadratic_loss(
     geom_yy = PointCloud(y, y, scale_cost=(1 / (1 - quadratic_weight)))
 
     # These keyword arguments are passed to all quadratic problems.
-    gw_kwds = {
-        "implicit_diff": ImplicitDiff(symmetric=True),
-        "epsilon": epsilon,
-        "relative_epsilon": False,
-    }
+    gw_kwds = {"threshold": 1e-3, "epsilon": epsilon, "relative_epsilon": False}
 
     # Compute the FGW loss between point clouds x and y.
     problem = QuadraticProblem(geom_s_x, geom_s_y, geom_xy, a=a, b=b)

@@ -33,9 +33,9 @@ class SpaceTime:
         teacher_forcing (bool, optional): Use teacher forcing. Defaults to True.
         quadratic (bool, optional): Use a Fused GW loss. Defaults to True.
         debias (bool, optional): Whether to debias the loss. Defaults to True.
-        epsilon (float, optional): The (relative) entropic reg. Defaults to 0.05.
+        epsilon (float, optional): The (relative) entropic reg. Defaults to 0.01.
         log_callback (Callable, optional): The callback for logging. Defaults to None.
-        quadratic_weight (float, optional): TRelative weight of the quadratic term, between 0 and 1.
+        quadratic_weight (float, optional): Weight of the quadratic term, in [0, 1].
     """
 
     potential: nn.Module = MLPPotential()
@@ -44,9 +44,9 @@ class SpaceTime:
     teacher_forcing: bool = True
     quadratic: bool = True
     debias: bool = True
-    epsilon: float = 0.05
+    epsilon: float = 0.01
     log_callback: Callable | None = None
-    quadratic_weight: float = 1e-2
+    quadratic_weight: float = 5e-3
 
     def fit(
         self,
@@ -73,7 +73,7 @@ class SpaceTime:
             space_key (str): The name of the obsm field containing space coordinates.
             optimizer (GradientTransformation, optional): The optimizer.
             max_iter (int, optional): The max number of iterations. Defaults to 10_000.
-            batch_size (int, optional): The batch size. Defaults to 250.
+            batch_size (int, optional): The batch size. Defaults to 1_000.
             train_val_split (float, optional): The proportion of train in the split.
             min_delta (float, optional): The minimum delta for early stopping.
             patience (int, optional): The patience for early stopping.
@@ -111,14 +111,10 @@ class SpaceTime:
 
         # Define some arguments shared by the train and validation loss.
         lkwargs = {"teacher_forcing": self.teacher_forcing, "potential": self.potential}
-        lkwargs = {
-            **lkwargs,
-            "tau_diff": tau_diff,
-            "quadratic_weight": self.quadratic_weight,
-        }
         lkwargs = {**lkwargs, "quadratic": self.quadratic, "debias": self.debias}
         lkwargs = {**lkwargs, "n_steps": self.n_steps, "epsilon": self.epsilon}
-        lkwargs = {**lkwargs, "proximal_step": self.proximal_step}
+        lkwargs = {**lkwargs, "proximal_step": self.proximal_step, "tau_diff": tau_diff}
+        lkwargs = {**lkwargs, "quadratic_weight": self.quadratic_weight}
 
         @jax.jit
         def jitted_update(params, opt_state, batch):
@@ -145,7 +141,7 @@ class SpaceTime:
         # The training loop.
         pbar = tqdm(range(1, max_iter + 1))
         for it in pbar:
-            # Randomly choose whether to train or validate, weighted by train-val split.
+            # Choose whether to train or validate, weighted by train-val split.
             batch_key, key = jax.random.split(key, num=2)
             is_train = dataloader.train_or_val(it)
 

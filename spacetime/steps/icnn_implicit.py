@@ -79,7 +79,9 @@ class ICNNImplicitStep(ProximalStep):
             return potential_term + inner_tau * 0.5 * prox_term
 
         # Define the optimizer.
-        opt = jaxopt.LBFGS(fun=proximal_cost, **self.opt_hyperparams)
+        opt = jaxopt.OptaxSolver(
+            fun=proximal_cost, opt=optax.adam(1e-2), **self.opt_hyperparams
+        )
 
         @jax.jit
         def jitted_update(y, state):
@@ -111,7 +113,7 @@ class ICNNImplicitStep(ProximalStep):
         """Performs an implicit step on the input distribution and returns the
         updated distribution. This function differs from the inference step in that it
         takes a potential network as input and returns the updated distribution. Logging
-        is not available in this function because it rpevents implicit differentiation.
+        is not available in this function because it prevents implicit differentiation.
 
         Args:
             x (jax.Array): The input distribution of size (batch_size, n_dims)
@@ -139,7 +141,9 @@ class ICNNImplicitStep(ProximalStep):
             return potential_term + inner_tau * 0.5 * prox_term
 
         # Define the optimizer.
-        opt = jaxopt.LBFGS(fun=proximal_cost, **self.opt_hyperparams)
+        opt = jaxopt.OptaxSolver(
+            fun=proximal_cost, opt=optax.adam(1e-2), **self.opt_hyperparams
+        )
 
         # Run the optimization loop.
         params_icnn, _ = opt.run(
