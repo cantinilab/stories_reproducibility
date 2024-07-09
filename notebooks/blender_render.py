@@ -26,15 +26,12 @@ radius *= 0.03
 
 points[:, 2] -= 32
 # Define the kernel type
-kernel = "cubic"
-smoothing = 0.025
+kernel = "gaussian"
+smoothing = 0.05
 
 # Define the interpolator.
 interpolator = RBFInterpolator(
-    points[:, :2],
-    points[:, 2],
-    smoothing=smoothing,
-    kernel=kernel,
+    points[:, :2], points[:, 2], smoothing=smoothing, kernel=kernel, epsilon=1.50
 )
 
 # Define the plotting limits
@@ -46,7 +43,7 @@ ymin, ymax = (
     points[:, 1].min(),
     points[:, 1].max(),
 )
-zmin, zmax = np.quantile(points[:, 2], [0.01, 0.995])
+zmin, zmax = np.quantile(points[:, 2], [5e-4, 0.995])
 
 # Define a grid
 x = np.linspace(xmin, xmax, 100)
